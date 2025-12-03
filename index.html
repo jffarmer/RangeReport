@@ -1,21 +1,21 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Range Check-In</title>
-  <style>
-    :root { --accent:#1f6feb; --bg:#f7fbff; --card:#fff; color-scheme:light; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); margin:0; padding:18px; display:flex; align-items:center; justify-content:center; min-height:100vh; }
-    .card { background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:18px; max-width:520px; width:100%; text-align:center; }
-    h1 { margin:6px 0 4px; font-size:20px; }
-    p { margin:8px 0 14px; color:#333; }
-    .muted { color:#666; font-size:13px; margin-bottom:12px; }
-    input[type="text"] { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ddd; box-sizing:border-box; font-size:16px; }
-    .btn { display:inline-block; background:var(--accent); color:#fff; padding:10px 14px; border-radius:10px; border:0; font-weight:600; cursor:pointer; margin-top:10px; }
-    .small { font-size:13px; color:#444; }
-    .status { margin-top:12px; font-weight:600; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Range Check-In</title>
+<style>
+  :root { --accent:#1f6feb; --bg:#f7fbff; --card:#fff; color-scheme:light; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); margin:0; padding:18px; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .card { background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:18px; max-width:520px; width:100%; text-align:center; }
+  h1 { margin:6px 0 4px; font-size:20px; }
+  p { margin:8px 0 14px; color:#333; }
+  .muted { color:#666; font-size:13px; margin-bottom:12px; }
+  input[type="text"] { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ddd; box-sizing:border-box; font-size:16px; }
+  .btn { display:inline-block; background:var(--accent); color:#fff; padding:10px 14px; border-radius:10px; border:0; font-weight:600; cursor:pointer; margin-top:10px; }
+  .small { font-size:13px; color:#444; }
+  .status { margin-top:12px; font-weight:600; }
+</style>
 </head>
 <body>
   <div class="card" id="app">
@@ -37,6 +37,7 @@
       <div class="status" id="doneText">You are checked in</div>
       <p class="muted">Thanks — this device will auto-check you in next time.</p>
       <p><a id="viewBtn" href="dashboard.html">See who’s on the range</a></p>
+      <button class="btn" id="checkoutBtn">Check Out</button>
     </div>
 
     <div id="error" style="display:none;">
@@ -47,17 +48,8 @@
   </div>
 
 <script>
-/*
-  Configuration:
-  - Replace CHECKIN_ENDPOINT with your Apps Script web app URL (deployed "Anyone, even anonymous")
-*/
 const CHECKIN_ENDPOINT = 'https://sheetdb.io/api/v1/8yuxyngjvtksx';
-
-// localStorage key for chosen identity
 const LS_KEY = 'range_identity_v1';
-
-// expiry of local identity (never expires unless user clears)
-const identity = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
 
 const setupEl = document.getElementById('setup');
 const busyEl = document.getElementById('busy');
@@ -68,10 +60,10 @@ const saveBtn = document.getElementById('saveNameBtn');
 const retryBtn = document.getElementById('retryBtn');
 const busyText = document.getElementById('busyText');
 const errorSub = document.getElementById('errorSub');
+const checkoutBtn = document.getElementById('checkoutBtn');
 
 function show(el){ setupEl.style.display='none'; busyEl.style.display='none'; doneEl.style.display='none'; errorEl.style.display='none'; el.style.display='block'; }
 
-// helper: detect device type lightly
 function detectDevice(){
   const ua = navigator.userAgent || '';
   if (/iphone|ipad|ipod/i.test(ua)) return 'iPhone';
@@ -81,7 +73,6 @@ function detectDevice(){
   return 'Device';
 }
 
-// create a per-device id stored in localStorage so revisit is same user even if name changed
 function getVisitorId(){
   const key = 'range_visitor_id_v1';
   let id = localStorage.getItem(key);
@@ -92,47 +83,60 @@ function getVisitorId(){
   return id;
 }
 
+async function postToSheet(data){
+  return fetch(CHECKIN_ENDPOINT, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ data })
+  });
+}
+
 async function doCheckin(name){
   show(busyEl);
   busyText.textContent = 'Checking you in…';
 
   const payload = {
-    data: {
-      name: name,
-      visitorId: getVisitorId(),
-      device: detectDevice(),
-      timestamp: new Date().toISOString()
-    }
+    name: name,
+    visitorId: getVisitorId(),
+    device: detectDevice(),
+    timestamp: new Date().toISOString(),
+    type: 'checkin'
   };
 
   try {
-    const res = await fetch(CHECKIN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok){
-      const txt = await res.text();
-      throw new Error('Server error: ' + res.status + ' ' + txt.slice(0,200));
-    }
-
+    const res = await postToSheet(payload);
+    if (!res.ok) throw new Error('Server error: '+res.status);
     document.getElementById('doneText').textContent = `Checked in as ${name}`;
     show(doneEl);
-  } catch (err){
+  } catch(err){
     console.error(err);
-    errorSub.textContent = (err && err.message) ? err.message : String(err);
+    errorSub.textContent = err.message || String(err);
     show(errorEl);
   }
 }
 
+async function doCheckout(){
+  const myId = getVisitorId();
+  const payload = {
+    visitorId: myId,
+    device: detectDevice(),
+    timestamp: new Date().toISOString(),
+    type: 'checkout'
+  };
+  try {
+    await postToSheet(payload);
+    alert('You are checked out!');
+  } catch(err){
+    console.error(err);
+    alert('Error checking out: '+ (err.message||err));
+  }
+}
 
 function startFlow(){
   const id = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
   if (!id){
     show(setupEl);
   } else {
-    // quick autopost
     doCheckin(id.name);
   }
 }
@@ -140,14 +144,13 @@ function startFlow(){
 saveBtn.addEventListener('click', ()=>{
   const val = nameInput.value && nameInput.value.trim();
   if (!val){ nameInput.focus(); return; }
-  const stored = { name: val };
-  localStorage.setItem(LS_KEY, JSON.stringify(stored));
+  localStorage.setItem(LS_KEY, JSON.stringify({ name: val }));
   doCheckin(val);
 });
 
 retryBtn.addEventListener('click', startFlow);
+checkoutBtn.addEventListener('click', doCheckout);
 
-// start automatically
 window.addEventListener('load', startFlow);
 </script>
 </body>
