@@ -97,10 +97,12 @@ async function doCheckin(name){
   busyText.textContent = 'Checking you in…';
 
   const payload = {
-    name: name,
-    visitorId: getVisitorId(),
-    device: detectDevice(),
-    timestamp: new Date().toISOString()
+    data: {
+      name: name,
+      visitorId: getVisitorId(),
+      device: detectDevice(),
+      timestamp: new Date().toISOString()
+    }
   };
 
   try {
@@ -114,19 +116,16 @@ async function doCheckin(name){
       const txt = await res.text();
       throw new Error('Server error: ' + res.status + ' ' + txt.slice(0,200));
     }
-    const j = await res.json();
-    if (j && j.ok){
-      document.getElementById('doneText').textContent = `Checked in as ${name}`;
-      show(doneEl);
-    } else {
-      throw new Error('Unexpected response');
-    }
+
+    document.getElementById('doneText').textContent = `Checked in as ${name}`;
+    show(doneEl);
   } catch (err){
     console.error(err);
     errorSub.textContent = (err && err.message) ? err.message : String(err);
     show(errorEl);
   }
 }
+
 
 function startFlow(){
   const id = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
