@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Who’s on the Range</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#f5f7fb; padding:20px; color:#111;}
+  .wrap{max-width:720px;margin:0 auto;}
+  h1{font-size:20px;margin:0 0 8px;}
+  .card{background:#fff;padding:14px;border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.06);}
+  .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}
+  .row:last-child{border-bottom:0;}
+  .muted{color:#666;font-size:13px;}
+  .empty{padding:20px;text-align:center;color:#666;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Who’s on the Range</h1>
+    <p class="muted">Auto-refreshing list (data stored publicly in the repo).</p>
+    <div class="card" id="list">
+      <div class="empty">Loading…</div>
+    </div>
+    <p class="muted" style="margin-top:10px">Note: Names are stored by visitors on their own device and posted to this public file. Entries auto-expire after 120 minutes.</p>
+  </div>
+
+<script>
+/* Replace with the raw.githubusercontent.com path to your checkins.json
+   Example:
+   https://raw.githubusercontent.com/your-username/your-repo/main/range_data/checkins.json
+*/
+const RAW_JSON_URL = 'REPLACE_WITH_RAW_CHECKINS_JSON_URL';
+const REFRESH_MS = 10000; // 10s
+
+function isoToDurationText(iso){
+  const then = new Date(iso);
+  const diff = Math.floor((Date.now() - then.getTime())/1000);
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff/60) + ' min';
+  return Math.floor(diff/3600) + ' hr ' + Math.floor((diff%3600)/60) + ' min';
+}
+
+async function fetchAndRender(){
+  const el = document.getElementById('list');
+  try {
+    const res = await fetch(RAW_JSON_URL + '?_=' + Date.now());
+    if (!res.ok) throw new Error('Fetch error ' + res.status);
+    const arr = await res.json();
+    if (!Array.isArray(arr) || arr.length === 0){
+      el.innerHTML = '<div class="empty">No one is currently checked in.</div>';
+      return;
+    }
+    // sort by entered timestamp ascending (older first) or descending? We'll show newest first:
+    arr.sort((a,b)=> new Date(b.entered) - new Date(a.entered));
+    const rows = arr.map(item => {
+      const name = item.name || 'Unknown';
+      const dur = isoToDurationText(item.entered);
+      return `<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${dur}</div></div>`;
+    }).join('');
+    el.innerHTML = rows;
+  } catch (err){
+    console.error(err);
+    el.innerHTML = `<div class="empty">Error loading data: ${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+fetchAndRender();
+setInterval(fetchAndRender, REFRESH_MS);
+</script>
+</body>
+</html>
