@@ -117,20 +117,31 @@ async function doCheckin(name){
 
 async function doCheckout(){
   const myId = getVisitorId();
+  if (!myId) return;
+
   const payload = {
-    visitorId: myId,
-    device: detectDevice(),
-    timestamp: new Date().toISOString(),
-    type: 'checkout'
+    data: {                     // <-- must include "data"
+      visitorId: myId,
+      device: detectDevice(),
+      timestamp: new Date().toISOString(),
+      type: 'checkout'
+    }
   };
+
   try {
-    await postToSheet(payload);
+    const res = await fetch(CHECKIN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Failed to post checkout: ' + res.status);
     alert('You are checked out!');
   } catch(err){
     console.error(err);
-    alert('Error checking out: '+ (err.message||err));
+    alert('Error checking out: ' + (err.message || err));
   }
 }
+
 
 function startFlow(){
   const id = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
