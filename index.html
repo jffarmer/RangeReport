@@ -20,7 +20,7 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 <body>
 
 <div class="card" id="checkinCard">
-  <h1>Range Check-In</h1>
+  <h1>🎯 OFP Range Check-In</h1>
 
   <div id="setup" style="display:none;">
     <label class="small">What should we call you?</label>
@@ -50,17 +50,17 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 </div>
 
 <div class="card">
-  <h2>Who’s on the Range</h2>
+  <h2>👥 Who’s on the Range</h2>
   <div id="list"><div class="empty">Loading…</div></div>
 </div>
 
 <div class="card">
-  <h2>Leaderboard</h2>
+  <h2>🏆 Leaderboard</h2>
   <div id="leaderboard"><div class="empty">Loading…</div></div>
 </div>
 
 <script>
-const CHECKIN_ENDPOINT = 'https://sheetdb.io/api/v1/8yuxyngjvtksx';
+const CHECKIN_ENDPOINT = 'https://sheetdb.io/api/v1/YOUR_SHEETDB_ID';
 const LS_KEY = 'range_identity_v1';
 const REFRESH_MS = 10000;
 const EXPIRY_MS = 8*60*60*1000;
@@ -134,7 +134,12 @@ async function applyAutoCheckouts() {
   for (const user of Object.values(latestByVisitor)) {
     if (user.type==='checkin' && now - user.timestamp > EXPIRY_MS) {
       try {
-        await postToSheet({visitorId: user.visitorId, name: user.name, device: 'auto-expiry', timestamp: new Date().toISOString(), type: 'checkout'
+        await postToSheet({
+          visitorId: user.visitorId,
+          name: user.name,
+          device: 'auto-expiry',
+          timestamp: new Date().toISOString(),
+          type: 'checkout'
         });
         console.log('Auto-checked out', user.name);
       } catch(err) { console.error('Failed to auto-checkout', user.name, err);}
@@ -172,6 +177,7 @@ async function updateUIState(){
       show(doneEl);
     }
   }
+  addChangeNameButton();
 }
 
 // ------------------ CHECK-IN / CHECK-OUT ------------------
@@ -189,9 +195,33 @@ async function doCheckout(){
   const myLatest = getMyLatestEntry();
   if(!myLatest) return;
   try{
-    await postToSheet({visitorId: getVisitorId(), name: myLatest.name, device: detectDevice(), timestamp: new Date().toISOString(), type: 'checkout'});
+    await postToSheet({
+      visitorId: getVisitorId(),
+      name: myLatest.name,
+      device: detectDevice(),
+      timestamp: new Date().toISOString(),
+      type: 'checkout'
+    });
     await updateUIState();
   }catch(err){ console.error(err); alert('Error checking out: '+(err.message||err)); }
+}
+
+// ------------------ NAME CHANGE ------------------
+function addChangeNameButton() {
+  const btnId = 'changeNameBtn';
+  if(document.getElementById(btnId)) return; // already added
+  const btn = document.createElement('button');
+  btn.textContent = 'Change Name';
+  btn.id = btnId;
+  btn.className = 'btn';
+  btn.style.marginTop = '6px';
+  btn.addEventListener('click', () => {
+    const idObj = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    if(idObj) nameInput.value = idObj.name;
+    show(setupEl);
+  });
+  doneEl.appendChild(btn.cloneNode(true));
+  checkedOutEl.appendChild(btn.cloneNode(true));
 }
 
 // ------------------ EVENT LISTENERS ------------------
