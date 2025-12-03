@@ -117,6 +117,35 @@ async function fetchAllEntries(){
   }catch(err){ console.error(err); }
 }
 
+// Apply auto-checkouts for entries older than 8 hours
+async function applyAutoCheckouts() {
+  const now = Date.now();
+  const latestByVisitor = {};
+
+  allEntries.forEach(item => {
+    const vid = item.visitorId;
+    if (!vid) return;
+    const ts = new Date(item.timestamp).getTime();
+    if (!latestByVisitor[vid] || ts > latestByVisitor[vid].timestamp) {
+      latestByVisitor[vid] = { ...item, timestamp: ts };
+    }
+  });
+
+  for (const user of Object.values(latestByVisitor)) {
+    if (user.type==='checkin' && now - user.timestamp > EXPIRY_MS) {
+      try {
+        await postToSheet({
+          visitorId: user.visitorId,
+          device: 'auto-expiry',
+          timestamp: new Date().toISOString(),
+          type: 'checkout'
+        });
+        console.log('Auto-checked out', user.name);
+      } catch(err) { console.error('Failed to auto-checkout', user.name, err);}
+    }
+  }
+}
+
 function getMyLatestEntry(){
   const vid = getVisitorId();
   const myEntries = allEntries.filter(e=>e.visitorId===vid);
@@ -127,12 +156,14 @@ function getMyLatestEntry(){
 
 async function updateUIState(){
   await fetchAllEntries();
+  await applyAutoCheckouts();
+  await fetchAllEntries(); // refetch to include auto-checkouts
   const idObj = JSON.parse(localStorage.getItem(LS_KEY)||'null');
   if(!idObj){ show(setupEl); return; }
 
   const myLatest = getMyLatestEntry();
   const now = Date.now();
-  if(!myLatest || (myLatest.type==='checkout')){ 
+  if(!myLatest || myLatest.type==='checkout'){ 
     checkedOutText.textContent = `You are checked out`; 
     show(checkedOutEl);
   } else {
@@ -184,20 +215,21 @@ function isoToDurationText(iso){ const diff=Math.floor((Date.now()-new Date(iso)
 
 async function renderDashboard(){
   await fetchAllEntries();
-  const now = Date.now();
+  await applyAutoCheckouts();
+  await fetchAllEntries();
 
-  // Live list
+  const now = Date.now();
   const latestByVisitor={};
   allEntries.forEach(item=>{
     const ts=new Date(item.timestamp).getTime(); const vid=item.visitorId;
     if(!vid) return;
     if(!latestByVisitor[vid] || ts>latestByVisitor[vid].timestamp) latestByVisitor[vid]={type:item.type||'checkin',timestamp:ts,name:item.name};
   });
+
   const recent=Object.values(latestByVisitor).filter(item=>item.type==='checkin'&&now-item.timestamp<=EXPIRY_MS);
   const listEl=document.getElementById('list');
   listEl.innerHTML = recent.length?recent.map(item=>`<div class="row"><div><strong>${escapeHtml(item.name||'Unknown')}</strong></div><div class="muted">${isoToDurationText(item.timestamp)}</div></div>`).join(''):'<div class="empty">No one is currently checked in.</div>';
 
-  // Leaderboard
   const counts={};
   allEntries.forEach(item=>{ if(item.type!=='checkout'){ const name=item.name||'Unknown'; counts[name]=(counts[name]||0)+1;} });
   const leaderboardEl=document.getElementById('leaderboard');
