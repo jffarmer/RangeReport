@@ -134,11 +134,7 @@ async function applyAutoCheckouts() {
   for (const user of Object.values(latestByVisitor)) {
     if (user.type==='checkin' && now - user.timestamp > EXPIRY_MS) {
       try {
-        await postToSheet({
-          visitorId: user.visitorId,
-          device: 'auto-expiry',
-          timestamp: new Date().toISOString(),
-          type: 'checkout'
+        await postToSheet({visitorId: user.visitorId, name: user.name, device: 'auto-expiry', timestamp: new Date().toISOString(), type: 'checkout'
         });
         console.log('Auto-checked out', user.name);
       } catch(err) { console.error('Failed to auto-checkout', user.name, err);}
@@ -190,8 +186,10 @@ async function doCheckin(){
 }
 
 async function doCheckout(){
+  const myLatest = getMyLatestEntry();
+  if(!myLatest) return;
   try{
-    await postToSheet({visitorId:getVisitorId(), device:detectDevice(), timestamp:new Date().toISOString(), type:'checkout'});
+    await postToSheet({visitorId: getVisitorId(), name: myLatest.name, device: detectDevice(), timestamp: new Date().toISOString(), type: 'checkout'});
     await updateUIState();
   }catch(err){ console.error(err); alert('Error checking out: '+(err.message||err)); }
 }
