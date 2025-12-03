@@ -1,11 +1,155 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Range Report</title>
-  </head>
-  <body>
-    <h1>Hello from GitHub Pages!</h1>
-  </body>
-</html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Range Check-In</title>
+  <style>
+    :root { --accent:#1f6feb; --bg:#f7fbff; --card:#fff; color-scheme:light; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); margin:0; padding:18px; display:flex; align-items:center; justify-content:center; min-height:100vh; }
+    .card { background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:18px; max-width:520px; width:100%; text-align:center; }
+    h1 { margin:6px 0 4px; font-size:20px; }
+    p { margin:8px 0 14px; color:#333; }
+    .muted { color:#666; font-size:13px; margin-bottom:12px; }
+    input[type="text"] { width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ddd; box-sizing:border-box; font-size:16px; }
+    .btn { display:inline-block; background:var(--accent); color:#fff; padding:10px 14px; border-radius:10px; border:0; font-weight:600; cursor:pointer; margin-top:10px; }
+    .small { font-size:13px; color:#444; }
+    .status { margin-top:12px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="card" id="app">
+    <h1>Range Check-In</h1>
+    <p class="muted">Scan the QR. You’ll be checked in automatically. First time: enter a name once.</p>
 
+    <div id="setup" style="display:none;">
+      <label class="small">What should we call you?</label>
+      <input id="nameInput" placeholder="Your name (first or nickname)" autocomplete="name" />
+      <button class="btn" id="saveNameBtn">Save & Check In</button>
+    </div>
+
+    <div id="busy" style="display:none;">
+      <div class="status" id="busyText">Checking you in…</div>
+      <p class="muted" id="busySub">If something takes a moment, that’s normal.</p>
+    </div>
+
+    <div id="done" style="display:none;">
+      <div class="status" id="doneText">You are checked in</div>
+      <p class="muted">Thanks — this device will auto-check you in next time.</p>
+      <p><a id="viewBtn" href="dashboard.html">See who’s on the range</a></p>
+    </div>
+
+    <div id="error" style="display:none;">
+      <div class="status" id="errorText">Error</div>
+      <p class="muted" id="errorSub"></p>
+      <button class="btn" id="retryBtn">Retry</button>
+    </div>
+  </div>
+
+<script>
+/*
+  Configuration:
+  - Replace CHECKIN_ENDPOINT with your Apps Script web app URL (deployed "Anyone, even anonymous")
+*/
+const CHECKIN_ENDPOINT = 'REPLACE_WITH_YOUR_APPS_SCRIPT_URL';
+
+// localStorage key for chosen identity
+const LS_KEY = 'range_identity_v1';
+
+// expiry of local identity (never expires unless user clears)
+const identity = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+
+const setupEl = document.getElementById('setup');
+const busyEl = document.getElementById('busy');
+const doneEl = document.getElementById('done');
+const errorEl = document.getElementById('error');
+const nameInput = document.getElementById('nameInput');
+const saveBtn = document.getElementById('saveNameBtn');
+const retryBtn = document.getElementById('retryBtn');
+const busyText = document.getElementById('busyText');
+const errorSub = document.getElementById('errorSub');
+
+function show(el){ setupEl.style.display='none'; busyEl.style.display='none'; doneEl.style.display='none'; errorEl.style.display='none'; el.style.display='block'; }
+
+// helper: detect device type lightly
+function detectDevice(){
+  const ua = navigator.userAgent || '';
+  if (/iphone|ipad|ipod/i.test(ua)) return 'iPhone';
+  if (/android/i.test(ua)) return 'Android';
+  if (/macintosh|mac os x/i.test(ua)) return 'Mac';
+  if (/windows/i.test(ua)) return 'Windows';
+  return 'Device';
+}
+
+// create a per-device id stored in localStorage so revisit is same user even if name changed
+function getVisitorId(){
+  const key = 'range_visitor_id_v1';
+  let id = localStorage.getItem(key);
+  if (!id){
+    id = 'u'+ Math.random().toString(36).slice(2,9);
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+async function doCheckin(name){
+  show(busyEl);
+  busyText.textContent = 'Checking you in…';
+
+  const payload = {
+    name: name,
+    visitorId: getVisitorId(),
+    device: detectDevice(),
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const res = await fetch(CHECKIN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok){
+      const txt = await res.text();
+      throw new Error('Server error: ' + res.status + ' ' + txt.slice(0,200));
+    }
+    const j = await res.json();
+    if (j && j.ok){
+      document.getElementById('doneText').textContent = `Checked in as ${name}`;
+      show(doneEl);
+    } else {
+      throw new Error('Unexpected response');
+    }
+  } catch (err){
+    console.error(err);
+    errorSub.textContent = (err && err.message) ? err.message : String(err);
+    show(errorEl);
+  }
+}
+
+function startFlow(){
+  const id = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+  if (!id){
+    show(setupEl);
+  } else {
+    // quick autopost
+    doCheckin(id.name);
+  }
+}
+
+saveBtn.addEventListener('click', ()=>{
+  const val = nameInput.value && nameInput.value.trim();
+  if (!val){ nameInput.focus(); return; }
+  const stored = { name: val };
+  localStorage.setItem(LS_KEY, JSON.stringify(stored));
+  doCheckin(val);
+});
+
+retryBtn.addEventListener('click', startFlow);
+
+// start automatically
+window.addEventListener('load', startFlow);
+</script>
+</body>
+</html>
