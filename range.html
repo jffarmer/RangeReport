@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Range Check-In & Live Dashboard</title>
+<title>Range Check-In & Dashboard</title>
 <style>
 :root { --accent:#1f6feb; --bg:#f7fbff; --card:#fff; color-scheme:light; }
 body { font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); margin:0; padding:18px; display:flex; flex-direction:column; align-items:center; min-height:100vh; }
@@ -21,6 +21,7 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 
 <div class="card" id="checkinCard">
   <h1>Range Check-In</h1>
+
   <div id="setup" style="display:none;">
     <label class="small">What should we call you?</label>
     <input id="nameInput" placeholder="Your name" autocomplete="name" />
@@ -34,6 +35,11 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   <div id="done" style="display:none;">
     <div class="status" id="doneText">You are checked in</div>
     <button class="btn" id="checkoutBtn">Check Out</button>
+  </div>
+
+  <div id="checkedOut" style="display:none;">
+    <div class="status" id="checkedOutText">You are checked out</div>
+    <button class="btn" id="checkBackInBtn">Check Back In</button>
   </div>
 
   <div id="error" style="display:none;">
@@ -62,15 +68,19 @@ const EXPIRY_MS = 8*60*60*1000;
 const setupEl = document.getElementById('setup');
 const busyEl = document.getElementById('busy');
 const doneEl = document.getElementById('done');
+const checkedOutEl = document.getElementById('checkedOut');
 const errorEl = document.getElementById('error');
 const nameInput = document.getElementById('nameInput');
 const saveBtn = document.getElementById('saveNameBtn');
 const retryBtn = document.getElementById('retryBtn');
 const checkoutBtn = document.getElementById('checkoutBtn');
+const checkBackInBtn = document.getElementById('checkBackInBtn');
 const busyText = document.getElementById('busyText');
 const errorSub = document.getElementById('errorSub');
+const doneText = document.getElementById('doneText');
+const checkedOutText = document.getElementById('checkedOutText');
 
-function show(el){ setupEl.style.display='none'; busyEl.style.display='none'; doneEl.style.display='none'; errorEl.style.display='none'; el.style.display='block'; }
+function show(el){ setupEl.style.display='none'; busyEl.style.display='none'; doneEl.style.display='none'; checkedOutEl.style.display='none'; errorEl.style.display='none'; el.style.display='block'; }
 
 function detectDevice(){
   const ua=navigator.userAgent||'';
@@ -96,89 +106,107 @@ async function postToSheet(data){
   });
 }
 
-async function doCheckin(name){
+// ------------------ STATE-AWARE FUNCTIONS ------------------
+let allEntries = [];
+
+async function fetchAllEntries(){
+  try{
+    const res = await fetch(CHECKIN_ENDPOINT+'?_='+Date.now());
+    if(!res.ok) throw new Error('Fetch error '+res.status);
+    allEntries = await res.json();
+  }catch(err){ console.error(err); }
+}
+
+function getMyLatestEntry(){
+  const vid = getVisitorId();
+  const myEntries = allEntries.filter(e=>e.visitorId===vid);
+  if(!myEntries.length) return null;
+  myEntries.sort((a,b)=> new Date(b.timestamp)-new Date(a.timestamp));
+  return myEntries[0];
+}
+
+async function updateUIState(){
+  await fetchAllEntries();
+  const idObj = JSON.parse(localStorage.getItem(LS_KEY)||'null');
+  if(!idObj){ show(setupEl); return; }
+
+  const myLatest = getMyLatestEntry();
+  const now = Date.now();
+  if(!myLatest || (myLatest.type==='checkout')){ 
+    checkedOutText.textContent = `You are checked out`; 
+    show(checkedOutEl);
+  } else {
+    const ts = new Date(myLatest.timestamp).getTime();
+    if(now-ts>EXPIRY_MS){
+      checkedOutText.textContent = `You are checked out (auto-expired)`; 
+      show(checkedOutEl);
+    } else {
+      doneText.textContent = `Checked in as ${idObj.name}`;
+      show(doneEl);
+    }
+  }
+}
+
+// ------------------ CHECK-IN / CHECK-OUT ------------------
+async function doCheckin(){
+  const idObj = JSON.parse(localStorage.getItem(LS_KEY)||'null');
+  if(!idObj) return;
   show(busyEl); busyText.textContent='Checking you in…';
-  try {
-    await postToSheet({
-      name, visitorId:getVisitorId(), device:detectDevice(),
-      timestamp:new Date().toISOString(), type:'checkin'
-    });
-    document.getElementById('doneText').textContent=`Checked in as ${name}`;
-    show(doneEl);
-  } catch(err){ console.error(err); errorSub.textContent=err.message||String(err); show(errorEl);}
+  try{
+    await postToSheet({name:idObj.name, visitorId:getVisitorId(), device:detectDevice(), timestamp:new Date().toISOString(), type:'checkin'});
+    await updateUIState();
+  }catch(err){ console.error(err); errorSub.textContent=err.message||String(err); show(errorEl);}
 }
 
 async function doCheckout(){
-  try {
-    await postToSheet({
-      visitorId:getVisitorId(),
-      device:detectDevice(),
-      timestamp:new Date().toISOString(),
-      type:'checkout'
-    });
-    alert('You are checked out!');
-    startFlow(); // reset UI
-  } catch(err){ console.error(err); alert('Error checking out: '+(err.message||err)); }
+  try{
+    await postToSheet({visitorId:getVisitorId(), device:detectDevice(), timestamp:new Date().toISOString(), type:'checkout'});
+    await updateUIState();
+  }catch(err){ console.error(err); alert('Error checking out: '+(err.message||err)); }
 }
 
-function startFlow(){
-  const id=JSON.parse(localStorage.getItem(LS_KEY)||'null');
-  if(!id) show(setupEl);
-  else doCheckin(id.name);
-}
-
+// ------------------ EVENT LISTENERS ------------------
 saveBtn.addEventListener('click',()=>{
   const val=nameInput.value && nameInput.value.trim();
   if(!val){ nameInput.focus(); return; }
   localStorage.setItem(LS_KEY, JSON.stringify({name:val}));
-  doCheckin(val);
+  doCheckin();
 });
-retryBtn.addEventListener('click', startFlow);
+retryBtn.addEventListener('click', updateUIState);
 checkoutBtn.addEventListener('click', doCheckout);
+checkBackInBtn.addEventListener('click', doCheckin);
 
-window.addEventListener('load', startFlow);
+window.addEventListener('load', updateUIState);
 
-// ---------------- Dashboard / Leaderboard ----------------
-
+// ------------------ LIVE LIST & LEADERBOARD ------------------
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function isoToDurationText(iso){ const diff=Math.floor((Date.now()-new Date(iso).getTime())/1000); return diff<60?'Just now':diff<3600?Math.floor(diff/60)+' min':Math.floor(diff/3600)+' hr '+Math.floor((diff%3600)/60)+' min';}
 
-let allEntries=[];
+async function renderDashboard(){
+  await fetchAllEntries();
+  const now = Date.now();
 
-async function fetchAndRender(){
-  try {
-    const res=await fetch(CHECKIN_ENDPOINT+'?_='+Date.now());
-    if(!res.ok)throw new Error('Fetch error '+res.status);
-    allEntries=await res.json();
+  // Live list
+  const latestByVisitor={};
+  allEntries.forEach(item=>{
+    const ts=new Date(item.timestamp).getTime(); const vid=item.visitorId;
+    if(!vid) return;
+    if(!latestByVisitor[vid] || ts>latestByVisitor[vid].timestamp) latestByVisitor[vid]={type:item.type||'checkin',timestamp:ts,name:item.name};
+  });
+  const recent=Object.values(latestByVisitor).filter(item=>item.type==='checkin'&&now-item.timestamp<=EXPIRY_MS);
+  const listEl=document.getElementById('list');
+  listEl.innerHTML = recent.length?recent.map(item=>`<div class="row"><div><strong>${escapeHtml(item.name||'Unknown')}</strong></div><div class="muted">${isoToDurationText(item.timestamp)}</div></div>`).join(''):'<div class="empty">No one is currently checked in.</div>';
 
-    const now=Date.now();
-    const latestByVisitor={};
-    allEntries.forEach(item=>{
-      const ts=new Date(item.timestamp).getTime(); const vid=item.visitorId;
-      if(!vid)return;
-      if(!latestByVisitor[vid]||ts>latestByVisitor[vid].timestamp) latestByVisitor[vid]={type:item.type||'checkin',timestamp:ts,name:item.name};
-    });
-
-    // Live list
-    const recent=Object.values(latestByVisitor).filter(item=>item.type==='checkin'&&now-item.timestamp<=EXPIRY_MS);
-    const listEl=document.getElementById('list');
-    listEl.innerHTML=recent.length?recent.map(item=>`<div class="row"><div><strong>${escapeHtml(item.name||'Unknown')}</strong></div><div class="muted">${isoToDurationText(item.timestamp)}</div></div>`).join(''):'<div class="empty">No one is currently checked in.</div>';
-
-    // Leaderboard
-    const counts={};
-    allEntries.forEach(item=>{ if(item.type!=='checkout'){ const name=item.name||'Unknown'; counts[name]=(counts[name]||0)+1;} });
-    const leaderboardEl=document.getElementById('leaderboard');
-    const boardHtml=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([name,count])=>`<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${count} check-ins</div></div>`).join('');
-    leaderboardEl.innerHTML=boardHtml||'<div class="empty">No check-ins yet.</div>';
-
-  } catch(err){ console.error(err);
-    document.getElementById('list').innerHTML=`<div class="empty">Error loading data: ${escapeHtml(err.message||err)}</div>`;
-    document.getElementById('leaderboard').innerHTML=`<div class="empty">Error loading data</div>`;
-  }
+  // Leaderboard
+  const counts={};
+  allEntries.forEach(item=>{ if(item.type!=='checkout'){ const name=item.name||'Unknown'; counts[name]=(counts[name]||0)+1;} });
+  const leaderboardEl=document.getElementById('leaderboard');
+  const boardHtml=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([name,count])=>`<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${count} check-ins</div></div>`).join('');
+  leaderboardEl.innerHTML = boardHtml||'<div class="empty">No check-ins yet.</div>';
 }
 
-fetchAndRender();
-setInterval(fetchAndRender, REFRESH_MS);
+setInterval(renderDashboard, REFRESH_MS);
+renderDashboard();
 </script>
 </body>
 </html>
