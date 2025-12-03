@@ -30,7 +30,7 @@
    Example:
    https://raw.githubusercontent.com/your-username/your-repo/main/range_data/checkins.json
 */
-const RAW_JSON_URL = 'https://raw.githubusercontent.com/jffarmer/RangeReport/main/range_data/checkins.json
+const RAW_JSON_URL = 'https://sheetdb.io/api/v1/8yuxyngjvtksx';
 ';
 const REFRESH_MS = 10000; // 10s
 
@@ -45,18 +45,16 @@ function isoToDurationText(iso){
 async function fetchAndRender(){
   const el = document.getElementById('list');
   try {
-    const res = await fetch(RAW_JSON_URL + '?_=' + Date.now());
+    const res = await fetch(RAW_JSON_URL + '?sort[timestamp]=desc'); // newest first
     if (!res.ok) throw new Error('Fetch error ' + res.status);
     const arr = await res.json();
     if (!Array.isArray(arr) || arr.length === 0){
       el.innerHTML = '<div class="empty">No one is currently checked in.</div>';
       return;
     }
-    // sort by entered timestamp ascending (older first) or descending? We'll show newest first:
-    arr.sort((a,b)=> new Date(b.entered) - new Date(a.entered));
     const rows = arr.map(item => {
       const name = item.name || 'Unknown';
-      const dur = isoToDurationText(item.entered);
+      const dur = isoToDurationText(item.timestamp);
       return `<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${dur}</div></div>`;
     }).join('');
     el.innerHTML = rows;
