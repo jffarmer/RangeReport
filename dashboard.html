@@ -7,32 +7,35 @@
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#f5f7fb; padding:20px; color:#111;}
   .wrap{max-width:720px;margin:0 auto;}
-  h1{font-size:20px;margin:0 0 8px;}
-  .card{background:#fff;padding:14px;border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.06);}
+  h1,h2{font-size:20px;margin:0 0 8px;}
+  .card{background:#fff;padding:14px;border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,.06); margin-bottom:14px;}
   .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}
   .row:last-child{border-bottom:0;}
   .muted{color:#666;font-size:13px;}
   .empty{padding:20px;text-align:center;color:#666;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff;padding:6px 12px;border-radius:8px;border:0;font-weight:600;cursor:pointer;margin-top:8px;}
 </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Who’s on the Range</h1>
-    <p class="muted">Auto-refreshing list (data stored publicly in the repo).</p>
-    <div class="card" id="list">
-      <div class="empty">Loading…</div>
-    </div>
-    <p class="muted" style="margin-top:10px">Note: Names are stored by visitors on their own device and posted to this public file. Entries auto-expire after 120 minutes.</p>
+    <p class="muted">Auto-refreshing list (last 8 hours). Entries persist in the Sheet for leaderboard purposes.</p>
+    
+    <div class="card" id="list"><div class="empty">Loading…</div></div>
+    <p><button id="checkoutBtn" class="btn">Check Out</button></p>
+
+    <h2>Leaderboard</h2>
+    <div class="card" id="leaderboard"><div class="empty">Loading…</div></div>
+
+    <p class="muted" style="margin-top:10px">Note: Names are stored by visitors on their own device. Live entries auto-expire after 8 hours.</p>
   </div>
 
 <script>
-/* Replace with the raw.githubusercontent.com path to your checkins.json
-   Example:
-   https://raw.githubusercontent.com/your-username/your-repo/main/range_data/checkins.json
-*/
 const RAW_JSON_URL = 'https://sheetdb.io/api/v1/8yuxyngjvtksx';
-  
 const REFRESH_MS = 10000; // 10s
+const EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function isoToDurationText(iso){
   const then = new Date(iso);
@@ -42,29 +45,62 @@ function isoToDurationText(iso){
   return Math.floor(diff/3600) + ' hr ' + Math.floor((diff%3600)/60) + ' min';
 }
 
+let allEntries = [];
+
 async function fetchAndRender(){
-  const el = document.getElementById('list');
+  const listEl = document.getElementById('list');
+  const leaderboardEl = document.getElementById('leaderboard');
   try {
-    const res = await fetch(RAW_JSON_URL + '?sort[timestamp]=desc'); // newest first
+    const res = await fetch(RAW_JSON_URL + '?sort[timestamp]=desc');
     if (!res.ok) throw new Error('Fetch error ' + res.status);
     const arr = await res.json();
-    if (!Array.isArray(arr) || arr.length === 0){
-      el.innerHTML = '<div class="empty">No one is currently checked in.</div>';
-      return;
-    }
-    const rows = arr.map(item => {
+    allEntries = arr; // keep full history for leaderboard
+
+    const now = Date.now();
+    const recent = arr.filter(item => now - new Date(item.timestamp).getTime() <= EXPIRY_MS);
+
+    // render live list
+    const listHtml = recent.length ? recent.map(item => {
       const name = item.name || 'Unknown';
       const dur = isoToDurationText(item.timestamp);
       return `<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${dur}</div></div>`;
-    }).join('');
-    el.innerHTML = rows;
-  } catch (err){
+    }).join('') : '<div class="empty">No one is currently checked in.</div>';
+    listEl.innerHTML = listHtml;
+
+    // render leaderboard
+    const counts = {};
+    arr.forEach(item => {
+      const name = item.name || 'Unknown';
+      counts[name] = (counts[name]||0)+1;
+    });
+    const boardHtml = Object.entries(counts)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([name,count])=>`<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${count} check-ins</div></div>`)
+      .join('');
+    leaderboardEl.innerHTML = boardHtml || '<div class="empty">No check-ins yet.</div>';
+
+  } catch(err){
     console.error(err);
-    el.innerHTML = `<div class="empty">Error loading data: ${escapeHtml(err.message || err)}</div>`;
+    listEl.innerHTML = `<div class="empty">Error loading data: ${escapeHtml(err.message || err)}</div>`;
+    leaderboardEl.innerHTML = `<div class="empty">Error loading data</div>`;
   }
 }
 
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// check out button
+document.getElementById('checkoutBtn').addEventListener('click', ()=>{
+  const myId = localStorage.getItem('range_visitor_id_v1');
+  if (!myId) return;
+  // remove from live list only
+  allEntries = allEntries.filter(item => item.visitorId !== myId);
+  const listEl = document.getElementById('list');
+  const recent = allEntries.filter(item => Date.now() - new Date(item.timestamp).getTime() <= EXPIRY_MS);
+  const listHtml = recent.length ? recent.map(item => {
+    const name = item.name || 'Unknown';
+    const dur = isoToDurationText(item.timestamp);
+    return `<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${dur}</div></div>`;
+  }).join('') : '<div class="empty">No one is currently checked in.</div>';
+  listEl.innerHTML = listHtml;
+});
 
 fetchAndRender();
 setInterval(fetchAndRender, REFRESH_MS);
