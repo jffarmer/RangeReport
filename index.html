@@ -222,21 +222,21 @@ changeNameBtn.addEventListener("click", async () => {
 const refreshBtn = document.getElementById('refreshBtn');
 
 refreshBtn.addEventListener('click', async () => {
-    refreshBtn.classList.add('loading');
     refreshBtn.disabled = true;
-    refreshBtn.innerHTML = '↻'; // optional “loading” indicator
-    try {
-        await loadState(); // your function that pulls latest Supabase data
-        loadLists();       // re-render list & leaderboard
-    } catch (err) {
-        console.error(err);
-        alert('Failed to refresh: ' + (err.message || err));
-    } finally {
-        refreshBtn.disabled = false;
-        refreshBtn.innerHTML = '↻'; // back to circular icon
-    }
+    refreshBtn.classList.add('loading');
+
+    const minSpin = new Promise(resolve => setTimeout(resolve, 1000)); // min 0.5s
+    const fetchData = (async () => {
+        await loadState();
+        loadLists();
+    })();
+
+    await Promise.all([minSpin, fetchData]);
+
     refreshBtn.classList.remove('loading');
+    refreshBtn.disabled = false;
 });
+
 
   
 // ---------- LOAD LISTS ----------
