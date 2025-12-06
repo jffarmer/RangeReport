@@ -66,118 +66,217 @@ const SUPABASE_URL = "https://ldrmmrsjmsnfguzfggkm.supabase.co";
 const SUPABASE_KEY = "sb_publishable_LNrWXskGMEq9Bt0LSEy1rw_5EykATx_";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// DOM elements
-const checkinForm = document.getElementById("checkin-form");
-const checkinNameInput = document.getElementById("checkin-name");
-const checkinBtn = document.getElementById("checkin-btn");
-const checkoutBtn = document.getElementById("checkout-btn");
-const changeNameBtn = document.getElementById("change-name-btn");
-const rangeList = document.getElementById("range-list");
+// DOM elements that *actually exist*
+const nameInput = document.getElementById("nameInput");
+const saveNameBtn = document.getElementById("saveNameBtn");
+const checkoutBtn = document.getElementById("checkoutBtn");
+const checkBackInBtn = document.getElementById("checkBackInBtn");
+const listDiv = document.getElementById("list");
+const leaderboardDiv = document.getElementById("leaderboard");
 
-let currentVisitorId = localStorage.getItem("visitor_id") || null;
+const setup = document.getElementById("setup");
+const busy = document.getElementById("busy");
+const done = document.getElementById("done");
+const checkedOut = document.getElementById("checkedOut");
+const errorDiv = document.getElementById("error");
 
-// Load initial data
-loadCheckins();
+let visitorId = localStorage.getItem("visitorId");
 
-// -------- FETCH CHECKINS --------
-async function loadCheckins() {
+// ---------- UI STATE ----------
+function showSetup() {
+    setup.style.display = "block";
+    busy.style.display = "none";
+    done.style.display = "none";
+    checkedOut.style.display = "none";
+}
+
+function showBusy(msg="Working…") {
+    setup.style.display = "none";
+    busy.style.display = "block";
+    busyText.innerText = msg;
+    done.style.display = "none";
+    checkedOut.style.display = "none";
+}
+
+function showCheckedIn() {
+    setup.style.display = "none";
+    busy.style.display = "none";
+    done.style.display = "block";
+    checkedOut.style.display = "none";
+}
+
+function showCheckedOut() {
+    setup.style.display = "none";
+    busy.style.display = "none";
+    done.style.display = "none";
+    checkedOut.style.display = "block";
+}
+
+// ---------- LOAD CURRENT STATE ----------
+async function loadState() {
+    if (!visitorId) {
+        showSetup();
+        return;
+    }
+
     const { data, error } = await supabase
         .from("range_checkins")
         .select("*")
-        .is("checkout", null); // only show active
+        .eq("visitorId", visitorId)
+        .order("timestamp", { ascending: false })
+        .limit(1);
 
-    if (error) {
-        console.error(error);
+    if (error || !data.length) {
+        showSetup();
         return;
     }
 
-    renderActiveUsers(data);
+    const last = data[0];
+    if (last.type === "checkin") showCheckedIn();
+    else showCheckedOut();
 }
 
-// -------- RENDER ACTIVE USERS --------
-function renderActiveUsers(list) {
-    rangeList.innerHTML = "";
-
-    list.forEach(entry => {
-        const div = document.createElement("div");
-        div.className = "user-entry";
-        div.innerHTML = `
-            <strong>${entry.name}</strong><br>
-            Checked in: ${new Date(entry.checkin + "Z").toLocaleString()}
-        `;
-        rangeList.appendChild(div);
-    });
-}
-
-// -------- CHECK IN --------
-checkinBtn.addEventListener("click", async () => {
-    const name = checkinNameInput.value.trim();
+// ---------- CHECK IN ----------
+saveNameBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
     if (!name) return;
 
-    const { data, error } = await supabase
+    showBusy("Checking you in…");
+
+    visitorId = crypto.randomUUID();
+    localStorage.setItem("visitorId", visitorId);
+
+    const { error } = await supabase
         .from("range_checkins")
         .insert({
             name,
-            checkin: new Date().toISOString(),
-            checkout: null
-        })
-        .select()
-        .single();
+            visitorId,
+            device: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            type: "checkin"
+        });
+
+    if (error) {
+        console.error(error);
+        showSetup();
+        return;
+    }
+
+    nameInput.value = "";
+    showCheckedIn();
+    loadLists();
+});
+
+// ---------- CHECK OUT ----------
+checkoutBtn.addEventListener("click", async () => {
+    if (!visitorId) return;
+
+    const { error } = await supabase
+        .from("range_checkins")
+        .insert({
+            name: null,
+            visitorId,
+            device: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            type: "checkout"
+        });
 
     if (error) {
         console.error(error);
         return;
     }
 
-    currentVisitorId = data.id;
-    localStorage.setItem("visitor_id", currentVisitorId);
-
-    checkinNameInput.value = "";
+    showCheckedOut();
+    loadLists();
 });
 
-// -------- CHECK OUT --------
-checkoutBtn.addEventListener("click", async () => {
-    if (!currentVisitorId) return;
+// ---------- CHECK BACK IN ----------
+checkBackInBtn.addEventListener("click", async () => {
+    const name = prompt("Name?");
+    if (!name) return;
 
     const { error } = await supabase
         .from("range_checkins")
-        .update({ checkout: new Date().toISOString() })
-        .eq("id", currentVisitorId);
+        .insert({
+            name,
+            visitorId,
+            device: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            type: "checkin"
+        });
 
-    if (error) console.error(error);
+    if (error) {
+        console.error(error);
+        return;
+    }
 
-    localStorage.removeItem("visitor_id");
-    currentVisitorId = null;
+    showCheckedIn();
+    loadLists();
 });
 
-// -------- CHANGE NAME --------
-changeNameBtn.addEventListener("click", async () => {
-    if (!currentVisitorId) return;
-
-    const newName = prompt("Enter your new name:");
-    if (!newName) return;
-
-    const { error } = await supabase
+// ---------- LOAD LISTS ----------
+async function loadLists() {
+    const { data, error } = await supabase
         .from("range_checkins")
-        .update({ name: newName })
-        .eq("id", currentVisitorId);
+        .select("*")
+        .order("timestamp", { ascending: false });
 
-    if (error) console.error(error);
-});
+    if (error) return;
 
-// -------- REALTIME UPDATES --------
-supabase
-    .channel("checkins-listener")
-    .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "range_checkins" },
-        payload => {
-            loadCheckins(); // instant update
+    const latestByVisitor = new Map();
+
+    for (const row of data) {
+        if (!latestByVisitor.has(row.visitorId)) {
+            latestByVisitor.set(row.visitorId, row);
         }
-    )
-    .subscribe();
+    }
 
+    // Who’s on the Range
+    listDiv.innerHTML = "";
+    [...latestByVisitor.values()]
+        .filter(r => r.type === "checkin")
+        .forEach(row => {
+            const div = document.createElement("div");
+            div.className = "row";
+            div.innerHTML = `
+                <strong>${row.name}</strong><br>
+                Checked in: ${new Date(row.timestamp).toLocaleString()}
+            `;
+            listDiv.appendChild(div);
+        });
+
+    // Leaderboard
+    const counts = {};
+    data.forEach(row => {
+        if (row.type === "checkin" && row.name) {
+            counts[row.name] = (counts[row.name] || 0) + 1;
+        }
+    });
+
+    leaderboardDiv.innerHTML = "";
+    Object.entries(counts)
+        .sort((a,b)=>b[1]-a[1])
+        .forEach(([name,count])=>{
+            const div = document.createElement("div");
+            div.className = "row";
+            div.innerHTML = `${name}: ${count}`;
+            leaderboardDiv.appendChild(div);
+        });
+}
+
+// Realtime: reload lists on any change
+supabase
+  .channel("changes")
+  .on("postgres_changes", { event:"*", schema:"public", table:"range_checkins" },
+      payload => loadLists()
+  )
+  .subscribe();
+
+// Initial load
+loadState();
+loadLists();
 </script>
+
 
 
 </body>
