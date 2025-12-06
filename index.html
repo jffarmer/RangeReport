@@ -49,6 +49,16 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   }
   body, .card { color:#eee; }
 }
+:root {
+  --highlight-bg: #e0f0ff; /* light mode */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --highlight-bg: rgba(255,255,255,0.12); /* subtle white tint */
+  }
+}
+
 </style>
 <link rel="icon" type="image/png" sizes="32x32" href="/RangeReport/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/RangeReport/favicon-16.png">
@@ -359,7 +369,9 @@ async function loadLists() {
     else{ activeRows.forEach(row=>{
         const div=document.createElement("div");
         div.className="row";
-        if(row.visitorId===visitorId) div.style.background="#e0f0ff";
+        if (row.visitorId === visitorId) {
+            div.style.background = "var(--highlight-bg)";
+        }
         div.innerHTML=`<strong>${row.name}</strong> Checked in: ${timeAgo(row.timestamp)}`;
         listDiv.appendChild(div);
     });}
