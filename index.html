@@ -224,7 +224,7 @@ const refreshBtn = document.getElementById('refreshBtn');
 refreshBtn.addEventListener('click', async () => {
     refreshBtn.classList.add('loading');
     refreshBtn.disabled = true;
-    refreshBtn.innerHTML = '⏳'; // optional “loading” indicator
+    refreshBtn.innerHTML = '↻'; // optional “loading” indicator
     try {
         await loadState(); // your function that pulls latest Supabase data
         loadLists();       // re-render list & leaderboard
