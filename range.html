@@ -103,9 +103,7 @@ function renderActiveUsers(list) {
         div.className = "user-entry";
         div.innerHTML = `
             <strong>${entry.name}</strong><br>
-            Checked in: ${
-              new Date(entry.checkin + "Z").toLocaleString()
-            }
+            Checked in: ${new Date(entry.checkin + "Z").toLocaleString()}
         `;
         rangeList.appendChild(div);
     });
