@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Range Check-In & Dashboard</title>
+<style>
+:root { --accent:#1f6feb; --bg:#f7fbff; --card:#fff; color-scheme:light; }
+body { font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); margin:0; padding:18px; display:flex; flex-direction:column; align-items:center; min-height:100vh; }
+.card { background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:18px; max-width:520px; width:100%; text-align:center; margin-bottom:14px; position:relative; }
+h1,h2{margin:6px 0 8px;}
+p, .muted{margin:4px 0;color:#666;font-size:13px;}
+input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #ddd;box-sizing:border-box;font-size:16px;}
+.btn{display:inline-block;background:var(--accent);color:#fff;padding:10px 14px;border-radius:10px;border:0;font-weight:600;cursor:pointer;margin-top:10px;}
+.row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;}
+.row:last-child{border-bottom:0;}
+.empty{text-align:center;color:#666;padding:14px;}
+#menuBtn{position:absolute; top:12px; right:12px; cursor:pointer; font-size:20px; user-select:none;}
+#menu{display:none; position:absolute; top:36px; right:12px; background:#fff; border:1px solid #ddd; border-radius:8px; padding:10px; z-index:100;}
+#menu button{padding:5px 10px; font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="card" id="checkinCard">
+  <h1>🎯 Range Check-In</h1>
+
+  <div id="setup" style="display:none;">
+    <label class="small">What should we call you?</label>
+    <input id="nameInput" placeholder="Your name" autocomplete="name" />
+    <button class="btn" id="saveNameBtn">Save & Check In</button>
+  </div>
+
+  <div id="busy" style="display:none;">
+    <div class="status" id="busyText">Checking you in…</div>
+  </div>
+
+  <div id="done" style="display:none;">
+    <div class="status" id="doneText">You are checked in</div>
+    <button class="btn" id="checkoutBtn">Check Out</button>
+  </div>
+
+  <div id="checkedOut" style="display:none;">
+    <div class="status" id="checkedOutText">You are checked out</div>
+    <button class="btn" id="checkBackInBtn">Check Back In</button>
+  </div>
+
+  <div id="error" style="display:none;">
+    <div class="status" id="errorText">Error</div>
+    <p class="muted" id="errorSub"></p>
+    <button class="btn" id="retryBtn">Retry</button>
+  </div>
+
+  <!-- Hamburger menu -->
+  <div id="menuBtn">☰</div>
+  <div id="menu">
+    <button id="changeNameBtn">Change Name</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>👥 Who’s on the Range</h2>
+  <div id="list"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="card">
+  <h2>🏆 Leaderboard</h2>
+  <div id="leaderboard"><div class="empty">Loading…</div></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
+
+const SUPABASE_URL = "https://ldrmmrsjmsnfguzfggkm.supabase.co";
+const SUPABASE_KEY = "sb_publishable_LNrWXskGMEq9Bt0LSEy1rw_5EykATx_";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const nameInput = document.getElementById("nameInput");
+const saveNameBtn = document.getElementById("saveNameBtn");
+const checkoutBtn = document.getElementById("checkoutBtn");
+const checkBackInBtn = document.getElementById("checkBackInBtn");
+const listDiv = document.getElementById("list");
+const leaderboardDiv = document.getElementById("leaderboard");
+const setup = document.getElementById("setup");
+const busy = document.getElementById("busy");
+const done = document.getElementById("done");
+const checkedOut = document.getElementById("checkedOut");
+const errorDiv = document.getElementById("error");
+const busyText = document.getElementById("busyText");
+
+const menuBtn = document.getElementById("menuBtn");
+const menu = document.getElementById("menu");
+const changeNameBtn = document.getElementById("changeNameBtn");
+
+let visitorId = localStorage.getItem("visitorId");
+let visitorName = localStorage.getItem("visitorName") || "";
+
+// ---------- UI STATE ----------
+function showSetup() { setup.style.display="block"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="none"; }
+function showBusy(msg="Working…") { setup.style.display="none"; busy.style.display="block"; busyText.innerText=msg; done.style.display="none"; checkedOut.style.display="none"; }
+function showCheckedIn() { setup.style.display="none"; busy.style.display="none"; done.style.display="block"; checkedOut.style.display="none"; }
+function showCheckedOut() { setup.style.display="none"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="block"; }
+function timeAgo(ts) { const diff=Math.floor((Date.now()-new Date(ts).getTime())/1000); if(diff<60)return"Just now"; if(diff<3600)return`${Math.floor(diff/60)} min ago`; return`${Math.floor(diff/3600)} hr ${Math.floor((diff%3600)/60)} min ago`; }
+
+// ---------- LOAD CURRENT STATE ----------
+async function loadState() {
+    if (!visitorId || !visitorName) { showSetup(); return; }
+
+    const { data, error } = await supabase
+        .from("range_checkins")
+        .select("*")
+        .eq("visitorId", visitorId)
+        .order("timestamp", { ascending: false })
+        .limit(1);
+
+    if (error || !data.length) { showSetup(); return; }
+
+    const last = data[0];
+    if (last.type==="checkin") showCheckedIn();
+    else showCheckedOut();
+}
+
+// ---------- CHECK IN ----------
+saveNameBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    if (!name) return;
+
+    showBusy("Checking you in…");
+
+    visitorId = crypto.randomUUID();
+    visitorName = name;
+    localStorage.setItem("visitorId", visitorId);
+    localStorage.setItem("visitorName", visitorName);
+
+    const { error } = await supabase
+        .from("range_checkins")
+        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkin" });
+
+    if (error) { console.error(error); showSetup(); return; }
+
+    nameInput.value = "";
+    showCheckedIn();
+    loadLists();
+});
+
+// ---------- CHECK OUT ----------
+checkoutBtn.addEventListener("click", async () => {
+    if (!visitorId || !visitorName) return;
+
+    const { error } = await supabase
+        .from("range_checkins")
+        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
+
+    if (error) { console.error(error); return; }
+
+    showCheckedOut();
+    loadLists();
+});
+
+// ---------- CHECK BACK IN ----------
+checkBackInBtn.addEventListener("click", async () => {
+    if (!visitorName) {
+        visitorName = prompt("Name?");
+        if (!visitorName) return;
+        localStorage.setItem("visitorName", visitorName);
+    }
+
+    const { error } = await supabase
+        .from("range_checkins")
+        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkin" });
+
+    if (error) { console.error(error); return; }
+
+    showCheckedIn();
+    loadLists();
+});
+
+// ---------- CHANGE NAME ----------
+menuBtn.addEventListener("click", () => { menu.style.display = menu.style.display==="block" ? "none" : "block"; });
+changeNameBtn.addEventListener("click", async () => {
+    const newName = prompt("Enter your new name:", visitorName);
+    if (!newName) return;
+    visitorName = newName;
+    localStorage.setItem("visitorName", visitorName);
+    menu.style.display="none";
+    alert("Name updated! Future check-ins will use the new name.");
+});
+
+// ---------- LOAD LISTS ----------
+async function loadLists() {
+    const { data, error } = await supabase.from("range_checkins").select("*").order("timestamp",{ascending:false});
+    if(error) return;
+
+    const latestByVisitor = new Map();
+    for(const row of data) if(!latestByVisitor.has(row.visitorId)) latestByVisitor.set(row.visitorId,row);
+
+    // Who's on the range
+    listDiv.innerHTML="";
+    const activeRows = [...latestByVisitor.values()].filter(r=>r.type==="checkin");
+    if(activeRows.length===0){ listDiv.innerHTML='<div class="empty">No one is currently on the range.</div>'; }
+    else{ activeRows.forEach(row=>{
+        const div=document.createElement("div");
+        div.className="row";
+        if(row.visitorId===visitorId) div.style.background="#e0f0ff";
+        div.innerHTML=`<strong>${row.name}</strong> Checked in: ${timeAgo(row.timestamp)}`;
+        listDiv.appendChild(div);
+    });}
+
+    // Leaderboard
+    const counts={};
+    data.forEach(row=>{ if(row.type==="checkin" && row.name) counts[row.name]=(counts[row.name]||0)+1; });
+
+    leaderboardDiv.innerHTML="";
+    Object.entries(counts).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=>{
+        const div=document.createElement("div");
+        div.className="row";
+        div.innerHTML=`<strong>${name}</strong> ${count} check-ins`;
+        leaderboardDiv.appendChild(div);
+    });
+}
+
+// Realtime: reload lists on any change
+supabase.channel("changes").on("postgres_changes",{ event:"*", schema:"public", table:"range_checkins" },payload=>loadLists()).subscribe();
+
+// Initial load
+loadState();
+loadLists();
+</script>
+
+</body>
+</html>
