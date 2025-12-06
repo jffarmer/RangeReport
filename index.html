@@ -247,6 +247,34 @@ async function loadLists() {
     const latestByVisitor = new Map();
     for(const row of data) if(!latestByVisitor.has(row.visitorId)) latestByVisitor.set(row.visitorId,row);
 
+    // --- AUTO CHECKOUT AFTER 4 HOURS ---
+    const FOUR_HOURS = 4 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    for (const [vid, row] of latestByVisitor.entries()) {
+        if (row.type === "checkin") {
+            const lastTime = new Date(row.timestamp).getTime();
+            if (now - lastTime > FOUR_HOURS) {
+                // Auto checkout
+                await supabase.from("range_checkins").insert({
+                    name: row.name,
+                    visitorId: vid,
+                    device: "auto-expire",
+                    timestamp: new Date().toISOString(),
+                    type: "checkout"
+                });
+
+                // Update map so UI reflects the new checkout
+                latestByVisitor.set(vid, {
+                    ...row,
+                    type: "checkout",
+                    timestamp: new Date().toISOString(),
+                    device: "auto-expire"
+                });
+            }
+        }
+    }
+
     // Who's on the range
     listDiv.innerHTML="";
     const activeRows = [...latestByVisitor.values()].filter(r=>r.type==="checkin");
