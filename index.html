@@ -41,6 +41,14 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 @keyframes fadeIn {
   to { opacity: 1; }
 }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#111;
+    --card:#1c1c1c;
+    --accent:#4ea1ff;
+  }
+  body, .card { color:#eee; }
+}
 </style>
 <link rel="icon" type="image/png" sizes="32x32" href="/RangeReport/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/RangeReport/favicon-16.png">
@@ -184,16 +192,40 @@ saveNameBtn.addEventListener("click", async () => {
 
     const { error } = await supabase
         .from("range_checkins")
-        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkin" });
+        .insert({
+            name: visitorName,
+            visitorId,
+            device: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            type: "checkin"
+        });
 
-    if (error) { console.error(error); showSetup(); return; }
+    if (error) { 
+        console.error(error);
+        showSetup();
+        return;
+    }
 
     nameInput.value = "";
     showCheckedIn();
     sound.play();
-    if (navigator.vibrate) navigator.vibrate(40);
+
+    // --- HAPTICS ---
+    try {
+        // Android
+        if ("vibrate" in navigator) navigator.vibrate(40);
+
+        // iPhone PWA (iOS 17.4+)
+        if (window.Haptics && Haptics.impactAsync) {
+            await Haptics.impactAsync("medium");
+        }
+    } catch (e) {
+        console.warn("Haptics failed:", e);
+    }
+
     loadLists();
 });
+
 
 // ---------- CHECK OUT ----------
 checkoutBtn.addEventListener("click", async () => {
@@ -206,7 +238,18 @@ checkoutBtn.addEventListener("click", async () => {
     if (error) { console.error(error); return; }
 
     showCheckedOut();
-     if (navigator.vibrate) navigator.vibrate([20, 20, 20]);
+     // --- HAPTICS ---
+    try {
+        // Android
+        if ("vibrate" in navigator) navigator.vibrate(40);
+
+        // iPhone PWA (iOS 17.4+)
+        if (window.Haptics && Haptics.impactAsync) {
+            await Haptics.impactAsync("small");
+        }
+    } catch (e) {
+        console.warn("Haptics failed:", e);
+    }
     loadLists();
 });
 
@@ -226,7 +269,18 @@ checkBackInBtn.addEventListener("click", async () => {
 
     showCheckedIn();
     sound.play();
-    if (navigator.vibrate) navigator.vibrate(40);
+    // --- HAPTICS ---
+    try {
+        // Android
+        if ("vibrate" in navigator) navigator.vibrate(40);
+
+        // iPhone PWA (iOS 17.4+)
+        if (window.Haptics && Haptics.impactAsync) {
+            await Haptics.impactAsync("medium");
+        }
+    } catch (e) {
+        console.warn("Haptics failed:", e);
+    }
     loadLists();
 });
 
