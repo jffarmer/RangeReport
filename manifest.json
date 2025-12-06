@@ -1,8 +1,8 @@
 {
   "name": "Range Check-In",
-  "short_name": "Check-In",
+  "short_name": "OFP Range",
   "description": "Check in and see who’s on the range",
-  "start_url": "/",
+  "start_url": "/RangeReport/",
   "display": "standalone",
   "background_color": "#f7fbff",
   "theme_color": "#1f6feb",
