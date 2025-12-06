@@ -104,11 +104,8 @@ function renderActiveUsers(list) {
         div.innerHTML = `
             <strong>${entry.name}</strong><br>
             Checked in: ${
-                new Date(entry.checkin).toString() !== "Invalid Date"
-                  ? new Date(entry.checkin).toLocaleString()
-                  : entry.checkin
-              }
-
+              new Date(entry.checkin + "Z").toLocaleString()
+            }
         `;
         rangeList.appendChild(div);
     });
