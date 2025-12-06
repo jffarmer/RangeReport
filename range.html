@@ -246,8 +246,8 @@ async function loadLists() {
             const div = document.createElement("div");
             div.className = "row";
             div.innerHTML = `
-                <strong>${row.name}</strong><br>
-                Checked in: ${timeAgo(row.timestamp)}}
+                <strong>${row.name}</strong>
+                Checked in: ${timeAgo(row.timestamp)}
             `;
             listDiv.appendChild(div);
         });
