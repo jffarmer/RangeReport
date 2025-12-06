@@ -20,7 +20,7 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 <body>
 
 <div class="card" id="checkinCard">
-  <h1>Range Check-In</h1>
+  <h1>🎯 Range Check-In</h1>
 
   <div id="setup" style="display:none;">
     <label class="small">What should we call you?</label>
@@ -50,12 +50,12 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 </div>
 
 <div class="card">
-  <h2>Who’s on the Range</h2>
+  <h2>👥 Who’s on the Range</h2>
   <div id="list"><div class="empty">Loading…</div></div>
 </div>
 
 <div class="card">
-  <h2>Leaderboard</h2>
+  <h2>🏆 Leaderboard</h2>
   <div id="leaderboard"><div class="empty">Loading…</div></div>
 </div>
 
@@ -110,6 +110,13 @@ function showCheckedOut() {
     busy.style.display = "none";
     done.style.display = "none";
     checkedOut.style.display = "block";
+}
+  
+function timeAgo(ts) {
+    const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    if (diff < 60) return "Just now";
+    if (diff < 3600) return `${Math.floor(diff/60)} min ago`;
+    return `${Math.floor(diff/3600)} hr ${Math.floor((diff%3600)/60)} min ago`;
 }
 
 // ---------- LOAD CURRENT STATE ----------
@@ -240,7 +247,7 @@ async function loadLists() {
             div.className = "row";
             div.innerHTML = `
                 <strong>${row.name}</strong><br>
-                Checked in: ${new Date(row.timestamp).toLocaleString()}
+                Checked in: ${Checked in: ${timeAgo(row.timestamp)}}
             `;
             listDiv.appendChild(div);
         });
@@ -259,7 +266,7 @@ async function loadLists() {
         .forEach(([name,count])=>{
             const div = document.createElement("div");
             div.className = "row";
-            div.innerHTML = `${name}: ${count}`;
+            div.innerHTML = `${name}: ${count} check-ins`;
             leaderboardDiv.appendChild(div);
         });
 }
