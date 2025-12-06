@@ -34,43 +34,28 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   opacity: 0.9; /* optional: softens it */
   border-radius: 12px;
 }
-/* --- Improved Row Styling --- */
-
-/* Add inner padding + rounded corners on row highlight */
 .row {
-  display:flex;
-  justify-content:space-between;
-  padding:10px 12px;        /* <-- was 10px 0; now has left/right padding */
-  border-bottom:1px solid #f0f0f0;
-  border-radius:8px;        /* rounds the highlight background */
-  margin:2px 0;             /* tiny spacing between rows */
   opacity: 0;
   animation: fadeIn .4s forwards;
 }
-
-.row:last-child {
-  border-bottom:0;
+@keyframes fadeIn {
+  to { opacity: 1; }
 }
-
-/* Highlight background for the user's own row */
-.highlight {
-  background: var(--highlight-bg);
-  color: inherit;           /* ensures good contrast */
-}
-
-/* Light mode highlight */
-:root {
-  --highlight-bg: #e0f0ff;
-}
-
-/* Dark mode highlight */
 @media (prefers-color-scheme: dark) {
   :root {
-    --highlight-bg: rgba(255,255,255,0.12); 
+    --bg:#111;
+    --card:#1c1c1c;
+    --accent:#4ea1ff;
   }
+  body, .card { color:#eee; }
+}
+:root {
+  --highlight-bg: #e0f0ff; /* light mode */
+}
 
-  .row {
-    border-bottom:1px solid rgba(255,255,255,0.08);
+@media (prefers-color-scheme: dark) {
+  :root {
+    --highlight-bg: rgba(255,255,255,0.12); /* subtle white tint */
   }
 }
 
@@ -384,7 +369,9 @@ async function loadLists() {
     else{ activeRows.forEach(row=>{
         const div=document.createElement("div");
         div.className="row";
-        if (row.visitorId === visitorId) div.classList.add("highlight");
+        if (row.visitorId === visitorId) {
+            div.style.background = "var(--highlight-bg)";
+        }
         div.innerHTML=`<strong>${row.name}</strong> Checked in: ${timeAgo(row.timestamp)}`;
         listDiv.appendChild(div);
     });}
