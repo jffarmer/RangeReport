@@ -112,11 +112,17 @@ function showCheckedOut() {
     checkedOut.style.display = "block";
 }
   
+// Helper: friendly relative time
 function timeAgo(ts) {
     const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-    if (diff < 60) return "Just now";
-    if (diff < 3600) return `${Math.floor(diff/60)} min ago`;
-    return `${Math.floor(diff/3600)} hr ${Math.floor((diff%3600)/60)} min ago`;
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    return `${Math.floor(diff / 3600)} hr ${Math.floor((diff % 3600) / 60)} min ago`;
+}
+
+// Safe HTML escape
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 // ---------- LOAD CURRENT STATE ----------
@@ -222,27 +228,24 @@ checkBackInBtn.addEventListener("click", async () => {
 });
 
 // ---------- LOAD LISTS ----------
-async function loadLists() {
-    const { data, error } = await supabase
-        .from("range_checkins")
-        .select("*")
-        .order("timestamp", { ascending: false });
+// ------------------ DASHBOARD RENDER ------------------
+function loadLists() {
+    const now = Date.now();
 
-    if (error) return;
-
+    // Aggregate latest entry per visitor
     const latestByVisitor = new Map();
-
-    for (const row of data) {
-        if (!latestByVisitor.has(row.visitorId)) {
-            latestByVisitor.set(row.visitorId, row);
+    allEntries.forEach(item => {
+        const vid = item.visitorId;
+        if (!vid) return;
+        const ts = new Date(item.timestamp).getTime();
+        if (!latestByVisitor.has(vid) || ts > latestByVisitor.get(vid).timestamp) {
+            latestByVisitor.set(vid, { ...item, timestamp: ts });
         }
-    }
+    });
 
-    // Who’s on the Range
+    // ----- Who's on the Range -----
     listDiv.innerHTML = "";
-    
     const activeRows = [...latestByVisitor.values()].filter(r => r.type === "checkin");
-    
     if (activeRows.length === 0) {
         listDiv.innerHTML = '<div class="empty">No one is currently on the range.</div>';
     } else {
@@ -250,31 +253,38 @@ async function loadLists() {
             const div = document.createElement("div");
             div.className = "row";
             div.innerHTML = `
-                <strong>${row.name}</strong>
-                Checked in: ${timeAgo(row.timestamp)}
+                <div><strong>${escapeHtml(row.name)}</strong></div>
+                <div class="muted">Checked in: ${timeAgo(row.timestamp)}</div>
             `;
             listDiv.appendChild(div);
         });
     }
 
-
-    // Leaderboard
+    // ----- Leaderboard -----
+    leaderboardDiv.innerHTML = "";
     const counts = {};
-    data.forEach(row => {
-        if (row.type === "checkin" && row.name) {
-            counts[row.name] = (counts[row.name] || 0) + 1;
+    allEntries.forEach(item => {
+        if (item.type === "checkin") {
+            const name = item.name || "Unknown";
+            counts[name] = (counts[name] || 0) + 1;
         }
     });
 
-    leaderboardDiv.innerHTML = "";
-    Object.entries(counts)
-        .sort((a,b)=>b[1]-a[1])
-        .forEach(([name,count])=>{
+    const sortedLeaderboard = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+    if (sortedLeaderboard.length === 0) {
+        leaderboardDiv.innerHTML = '<div class="empty">No check-ins yet.</div>';
+    } else {
+        sortedLeaderboard.forEach(([name, count]) => {
             const div = document.createElement("div");
             div.className = "row";
-            div.innerHTML = `${name}: ${count} check-ins`;
+            div.innerHTML = `
+                <div><strong>${escapeHtml(name)}</strong></div>
+                <div class="muted">${count} check-in${count > 1 ? 's' : ''}</div>
+            `;
             leaderboardDiv.appendChild(div);
         });
+    }
 }
 
 // Realtime: reload lists on any change
