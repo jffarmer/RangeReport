@@ -22,10 +22,20 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-
 #refreshBtn.loading {
   animation: spin 1s linear infinite;
 }
+.footer-image {
+  width: 100%;
+  height: 160px; /* you can adjust */
+  background: 
+    linear-gradient(to top, var(--bg), transparent 60%),
+    url('/RangeReport/footer-image.png') center bottom / cover no-repeat;
+  opacity: 0.9; /* optional: softens it */
+  margin-top: 30px;
+  border-radius: 12px;
+}
+
 </style>
 <link rel="icon" type="image/png" sizes="32x32" href="/RangeReport/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/RangeReport/favicon-16.png">
@@ -99,6 +109,8 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   <h2>🏆 Leaderboard</h2>
   <div id="leaderboard"><div class="empty">Loading…</div></div>
 </div>
+
+<div class="footer-image"></div>
 
 <script type="module">
 import { createClient } from "https://esm.sh/@supabase/supabase-js";
