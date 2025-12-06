@@ -60,11 +60,21 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 </div>
 
 <script>
-const CHECKIN_ENDPOINT = 'https://sheetdb.io/api/v1/8yuxyngjvtksx';
-const LS_KEY = 'range_identity_v1';
+/* ---------------- CONFIG ---------------- */
+const SUPABASE_URL = "https://ldrmmrsjmsnfguzfggkm.supabase.co";
+const SUPABASE_KEY = "sb_publishable_LNrWXskGMEq9Bt0LSEy1rw_5EykATx_";
+const TABLE = "range_checkins";
 const REFRESH_MS = 10000;
 const EXPIRY_MS = 8*60*60*1000;
+const LS_KEY = 'range_identity_v1';
 
+const supabaseHeaders = {
+  "Content-Type": "application/json",
+  "apikey": SUPABASE_KEY,
+  "Authorization": "Bearer " + SUPABASE_KEY
+};
+
+/* ---------------- DOM ELEMENTS ---------------- */
 const setupEl = document.getElementById('setup');
 const busyEl = document.getElementById('busy');
 const doneEl = document.getElementById('done');
@@ -80,7 +90,14 @@ const errorSub = document.getElementById('errorSub');
 const doneText = document.getElementById('doneText');
 const checkedOutText = document.getElementById('checkedOutText');
 
-function show(el){ setupEl.style.display='none'; busyEl.style.display='none'; doneEl.style.display='none'; checkedOutEl.style.display='none'; errorEl.style.display='none'; el.style.display='block'; }
+function show(el) {
+  setupEl.style.display='none';
+  busyEl.style.display='none';
+  doneEl.style.display='none';
+  checkedOutEl.style.display='none';
+  errorEl.style.display='none';
+  el.style.display='block';
+}
 
 function detectDevice(){
   const ua=navigator.userAgent||'';
@@ -94,30 +111,47 @@ function detectDevice(){
 function getVisitorId(){
   const key='range_visitor_id_v1';
   let id=localStorage.getItem(key);
-  if(!id){ id='u'+Math.random().toString(36).slice(2,9); localStorage.setItem(key,id);}
+  if(!id){
+    id='u'+Math.random().toString(36).slice(2,9);
+    localStorage.setItem(key,id);
+  }
   return id;
 }
 
-async function postToSheet(data){
-  return fetch(CHECKIN_ENDPOINT,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({data})
+/* ---------------- INSERT INTO SUPABASE ---------------- */
+async function postToSupabase(row){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+    method: "POST",
+    headers: supabaseHeaders,
+    body: JSON.stringify(row)
   });
+
+  if (!res.ok){
+    const msg = await res.text();
+    throw new Error("Supabase insert error: " + msg);
+  }
+
+  return res.json();
 }
 
-// ------------------ STATE-AWARE FUNCTIONS ------------------
+/* ---------------- FETCH FROM SUPABASE ---------------- */
 let allEntries = [];
 
 async function fetchAllEntries(){
-  try{
-    const res = await fetch(CHECKIN_ENDPOINT+'?_='+Date.now());
-    if(!res.ok) throw new Error('Fetch error '+res.status);
-    allEntries = await res.json();
-  }catch(err){ console.error(err); }
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=timestamp.asc`,
+    { headers: supabaseHeaders }
+  );
+
+  if (!res.ok){
+    console.error("Fetch error", await res.text());
+    return;
+  }
+
+  allEntries = await res.json();
 }
 
-// Apply auto-checkouts for entries older than 8 hours
+/* ---------- Auto-expire old checkins (same logic) ---------- */
 async function applyAutoCheckouts() {
   const now = Date.now();
   const latestByVisitor = {};
@@ -134,82 +168,119 @@ async function applyAutoCheckouts() {
   for (const user of Object.values(latestByVisitor)) {
     if (user.type==='checkin' && now - user.timestamp > EXPIRY_MS) {
       try {
-        await postToSheet({visitorId: user.visitorId, name: user.name, device: 'auto-expiry', timestamp: new Date().toISOString(), type: 'checkout'
+        await postToSupabase({
+          visitorId: user.visitorId,
+          name: user.name,
+          device: "auto-expiry",
+          timestamp: new Date().toISOString(),
+          type: "checkout"
         });
-        console.log('Auto-checked out', user.name);
-      } catch(err) { console.error('Failed to auto-checkout', user.name, err);}
+      } catch(e){
+        console.error("Auto-checkout failed", user.name, e);
+      }
     }
   }
 }
 
 function getMyLatestEntry(){
   const vid = getVisitorId();
-  const myEntries = allEntries.filter(e=>e.visitorId===vid);
-  if(!myEntries.length) return null;
-  myEntries.sort((a,b)=> new Date(b.timestamp)-new Date(a.timestamp));
-  return myEntries[0];
+  const my = allEntries.filter(e=>e.visitorId===vid);
+  if(!my.length) return null;
+  my.sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+  return my[0];
 }
 
 async function updateUIState(){
   await fetchAllEntries();
   await applyAutoCheckouts();
-  await fetchAllEntries(); // refetch to include auto-checkouts
+  await fetchAllEntries();
+
   const idObj = JSON.parse(localStorage.getItem(LS_KEY)||'null');
   if(!idObj){ show(setupEl); return; }
 
   const myLatest = getMyLatestEntry();
   const now = Date.now();
-  if(!myLatest || myLatest.type==='checkout'){ 
-    checkedOutText.textContent = `You are checked out`; 
+
+  if(!myLatest || myLatest.type==='checkout'){
+    checkedOutText.textContent="You are checked out";
     show(checkedOutEl);
   } else {
     const ts = new Date(myLatest.timestamp).getTime();
-    if(now-ts>EXPIRY_MS){
-      checkedOutText.textContent = `You are checked out (auto-expired)`; 
+    if(now-ts > EXPIRY_MS){
+      checkedOutText.textContent="You are checked out (auto-expired)";
       show(checkedOutEl);
     } else {
-      doneText.textContent = `Checked in as ${idObj.name}`;
+      doneText.textContent=`Checked in as ${idObj.name}`;
       show(doneEl);
     }
   }
 }
 
-// ------------------ CHECK-IN / CHECK-OUT ------------------
+/* ---------------- CHECK-IN / CHECK-OUT ---------------- */
 async function doCheckin(){
   const idObj = JSON.parse(localStorage.getItem(LS_KEY)||'null');
   if(!idObj) return;
-  show(busyEl); busyText.textContent='Checking you in…';
+  show(busyEl); busyText.textContent="Checking you in…";
+
   try{
-    await postToSheet({name:idObj.name, visitorId:getVisitorId(), device:detectDevice(), timestamp:new Date().toISOString(), type:'checkin'});
+    await postToSupabase({
+      name: idObj.name,
+      visitorId: getVisitorId(),
+      device: detectDevice(),
+      timestamp: new Date().toISOString(),
+      type: "checkin"
+    });
     await updateUIState();
-  }catch(err){ console.error(err); errorSub.textContent=err.message||String(err); show(errorEl);}
+  } catch(err){
+    console.error(err);
+    errorSub.textContent = err.message;
+    show(errorEl);
+  }
 }
 
 async function doCheckout(){
   const myLatest = getMyLatestEntry();
   if(!myLatest) return;
+
   try{
-    await postToSheet({visitorId: getVisitorId(), name: myLatest.name, device: detectDevice(), timestamp: new Date().toISOString(), type: 'checkout'});
+    await postToSupabase({
+      name: myLatest.name,
+      visitorId: getVisitorId(),
+      device: detectDevice(),
+      timestamp: new Date().toISOString(),
+      type: "checkout"
+    });
     await updateUIState();
-  }catch(err){ console.error(err); alert('Error checking out: '+(err.message||err)); }
+  } catch(err){
+    alert("Error: " + err.message);
+  }
 }
 
-// ------------------ EVENT LISTENERS ------------------
-saveBtn.addEventListener('click',()=>{
-  const val=nameInput.value && nameInput.value.trim();
+/* ---------------- EVENT LISTENERS ---------------- */
+saveBtn.addEventListener("click", ()=>{
+  const val = nameInput.value.trim();
   if(!val){ nameInput.focus(); return; }
   localStorage.setItem(LS_KEY, JSON.stringify({name:val}));
   doCheckin();
 });
-retryBtn.addEventListener('click', updateUIState);
-checkoutBtn.addEventListener('click', doCheckout);
-checkBackInBtn.addEventListener('click', doCheckin);
+retryBtn.addEventListener("click", updateUIState);
+checkoutBtn.addEventListener("click", doCheckout);
+checkBackInBtn.addEventListener("click", doCheckin);
 
-window.addEventListener('load', updateUIState);
+window.addEventListener("load", updateUIState);
 
-// ------------------ LIVE LIST & LEADERBOARD ------------------
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function isoToDurationText(iso){ const diff=Math.floor((Date.now()-new Date(iso).getTime())/1000); return diff<60?'Just now':diff<3600?Math.floor(diff/60)+' min':Math.floor(diff/3600)+' hr '+Math.floor((diff%3600)/60)+' min';}
+/* ---------------- LIVE LIST + LEADERBOARD ---------------- */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function isoToDurationText(iso){
+  const diff = Math.floor((Date.now()-new Date(iso).getTime())/1000);
+  return diff<60
+    ? "Just now"
+    : diff<3600
+    ? Math.floor(diff/60) + " min"
+    : Math.floor(diff/3600)+" hr "+Math.floor((diff%3600)/60)+" min";
+}
 
 async function renderDashboard(){
   await fetchAllEntries();
@@ -218,25 +289,54 @@ async function renderDashboard(){
 
   const now = Date.now();
   const latestByVisitor={};
+
   allEntries.forEach(item=>{
-    const ts=new Date(item.timestamp).getTime(); const vid=item.visitorId;
+    const ts = new Date(item.timestamp).getTime();
+    const vid = item.visitorId;
     if(!vid) return;
-    if(!latestByVisitor[vid] || ts>latestByVisitor[vid].timestamp) latestByVisitor[vid]={type:item.type||'checkin',timestamp:ts,name:item.name};
+    if(!latestByVisitor[vid] || ts > latestByVisitor[vid].timestamp){
+      latestByVisitor[vid] = {
+        type:item.type,
+        timestamp:ts,
+        name:item.name
+      };
+    }
   });
 
-  const recent=Object.values(latestByVisitor).filter(item=>item.type==='checkin'&&now-item.timestamp<=EXPIRY_MS);
-  const listEl=document.getElementById('list');
-  listEl.innerHTML = recent.length?recent.map(item=>`<div class="row"><div><strong>${escapeHtml(item.name||'Unknown')}</strong></div><div class="muted">${isoToDurationText(item.timestamp)}</div></div>`).join(''):'<div class="empty">No one is currently checked in.</div>';
+  const recent = Object.values(latestByVisitor)
+    .filter(i=>i.type==="checkin" && now-i.timestamp <= EXPIRY_MS);
+
+  document.getElementById("list").innerHTML =
+    recent.length
+      ? recent.map(i=>`
+        <div class="row">
+          <div><strong>${escapeHtml(i.name||"Unknown")}</strong></div>
+          <div class="muted">${isoToDurationText(i.timestamp)}</div>
+        </div>`).join("")
+      : `<div class="empty">No one is currently checked in.</div>`;
 
   const counts={};
-  allEntries.forEach(item=>{ if(item.type!=='checkout'){ const name=item.name||'Unknown'; counts[name]=(counts[name]||0)+1;} });
-  const leaderboardEl=document.getElementById('leaderboard');
-  const boardHtml=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([name,count])=>`<div class="row"><div><strong>${escapeHtml(name)}</strong></div><div class="muted">${count} check-ins</div></div>`).join('');
-  leaderboardEl.innerHTML = boardHtml||'<div class="empty">No check-ins yet.</div>';
+  allEntries.forEach(i=>{
+    if(i.type !== "checkout"){
+      counts[i.name||"Unknown"] = (counts[i.name||"Unknown"]||0) + 1;
+    }
+  });
+
+  const leaderboardHtml = Object.entries(counts)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([name,count]) => `
+      <div class="row">
+        <div><strong>${escapeHtml(name)}</strong></div>
+        <div class="muted">${count} check-ins</div>
+      </div>`).join("");
+
+  document.getElementById("leaderboard").innerHTML =
+    leaderboardHtml || `<div class="empty">No check-ins yet.</div>`;
 }
 
 setInterval(renderDashboard, REFRESH_MS);
 renderDashboard();
 </script>
+
 </body>
 </html>
