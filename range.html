@@ -240,9 +240,13 @@ async function loadLists() {
 
     // Who’s on the Range
     listDiv.innerHTML = "";
-    [...latestByVisitor.values()]
-        .filter(r => r.type === "checkin")
-        .forEach(row => {
+    
+    const activeRows = [...latestByVisitor.values()].filter(r => r.type === "checkin");
+    
+    if (activeRows.length === 0) {
+        listDiv.innerHTML = '<div class="empty">No one is currently on the range.</div>';
+    } else {
+        activeRows.forEach(row => {
             const div = document.createElement("div");
             div.className = "row";
             div.innerHTML = `
@@ -251,6 +255,8 @@ async function loadLists() {
             `;
             listDiv.appendChild(div);
         });
+    }
+
 
     // Leaderboard
     const counts = {};
