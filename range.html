@@ -174,7 +174,7 @@ checkoutBtn.addEventListener("click", async () => {
     const { error } = await supabase
         .from("range_checkins")
         .insert({
-            name: null,
+            name,
             visitorId,
             device: navigator.userAgent,
             timestamp: new Date().toISOString(),
