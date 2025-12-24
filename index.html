@@ -378,6 +378,7 @@ async function loadLists() {
     });}
 
     // Leaderboard
+    /*Checkin Counts
     const counts={};
     data.forEach(row=>{ if(row.type==="checkin" && row.name) counts[row.name]=(counts[row.name]||0)+1; });
 
@@ -388,6 +389,59 @@ async function loadLists() {
         div.innerHTML=`<strong>${name}</strong> ${count} check-ins`;
         leaderboardDiv.appendChild(div);
     });
+    */
+  // ---------- LEADERBOARD: TOTAL HOURS ----------
+  const sessionsByVisitor = {};
+  const totalMsByName = {};
+  
+  // Step 1: group events per visitor
+  data
+    .filter(r => r.name && r.visitorId)
+    .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+    .forEach(row => {
+      if (!sessionsByVisitor[row.visitorId]) {
+        sessionsByVisitor[row.visitorId] = [];
+      }
+      sessionsByVisitor[row.visitorId].push(row);
+    });
+  
+  // Step 2: pair checkin → checkout
+  Object.values(sessionsByVisitor).forEach(events => {
+    for (let i = 0; i < events.length; i++) {
+      const start = events[i];
+  
+      if (start.type !== "checkin") continue;
+  
+      const end = events[i + 1];
+      if (!end || end.type !== "checkout") continue;
+  
+      const durationMs =
+        new Date(end.timestamp) - new Date(start.timestamp);
+  
+      if (durationMs > 0) {
+        totalMsByName[start.name] =
+          (totalMsByName[start.name] || 0) + durationMs;
+      }
+    }
+  });
+  
+  // Step 3: render leaderboard
+  leaderboardDiv.innerHTML = "";
+  
+  Object.entries(totalMsByName)
+    .map(([name, ms]) => {
+      const hours = Math.round(ms / (1000 * 60 * 60));
+      return [name, hours];
+    })
+    .filter(([, hours]) => hours > 0)
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([name, hours]) => {
+      const div = document.createElement("div");
+      div.className = "row";
+      div.innerHTML = `<strong>${name}</strong> ${hours} hr${hours !== 1 ? "s" : ""}`;
+      leaderboardDiv.appendChild(div);
+    });
+
 }
 
 // Realtime: reload lists on any change
