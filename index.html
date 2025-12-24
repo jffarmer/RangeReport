@@ -60,6 +60,35 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   }
 }
 
+/* Flex container */
+.row-cards {
+  display: flex;
+  flex-wrap: wrap;       /* allows stacking on narrow screens */
+  gap: 14px;
+  margin-top: 14px;
+  width: 100%;
+  max-width: 1080px;     /* optional: aligns with page layout */
+}
+
+/* Half-width cards on desktop */
+.half-card {
+  flex: 1 1 48%;          /* grow, shrink, base 48% width */
+  min-width: 260px;       /* prevents too small on mobile */
+}
+
+/* Optional: make text fit nicely */
+.half-card h2 {
+  font-size: 1.2em;
+  margin-bottom: 8px;
+}
+
+/* Mobile: stack cards vertically */
+@media (max-width: 600px) {
+  .half-card {
+    flex-basis: 100%;
+  }
+}
+
 </style>
 <link rel="icon" type="image/png" sizes="32x32" href="/RangeReport/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/RangeReport/favicon-16.png">
@@ -138,12 +167,12 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   </div>
 </div>
 
-<div style="display:flex; gap:14px; margin-top:14px;">
-  <div class="card" style="width:50%; min-width:240px;">
+<div class="row-cards">
+  <div class="card half-card">
     <h2>⏱ Active Hours</h2>
     <div id="activeHours">Loading…</div>
   </div>
-  <div class="card" style="width:50%; min-width:240px;">
+  <div class="card half-card">
     <h2>👥 Recent Check-Ins</h2>
     <div id="recentCheckins">Loading…</div>
   </div>
