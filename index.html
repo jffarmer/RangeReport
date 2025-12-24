@@ -191,10 +191,9 @@ function renderLeaderboard(source) {
   }
 
   entries.forEach(([name, ms], index) => {
-    const totalMinutes = Math.round(ms / 60000);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    const roundedHours = Math.round(ms / 3600000);
+    // Convert ms → hours with 1 decimal
+    const hours = ms / 3600000;
+    const displayHours = Math.round(hours * 10) / 10;
 
     const medal =
       index === 0 ? "🥇" :
@@ -204,17 +203,15 @@ function renderLeaderboard(source) {
     const div = document.createElement("div");
     div.className = "row";
 
-    // ✅ Tooltip restored
-    div.title = `${hours}h ${minutes}m`;
-
     div.innerHTML = `
       <strong>${medal} ${name}</strong>
-      <span>${roundedHours} hr</span>
+      <span>⏱ ${displayHours} hrs</span>
     `;
 
     leaderboardDiv.appendChild(div);
   });
 }
+
 function setActive(btn) {
   document.querySelectorAll("#lbMonth,#lbAll")
     .forEach(b => b.style.opacity = "0.6");
