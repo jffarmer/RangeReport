@@ -518,7 +518,7 @@ Object.values(activeSessions).forEach(session => {
 
 // --- Active Hours Card (This Month) ---
 const totalMsMonth = Object.values(totalsMonth).reduce((a, b) => a + b, 0);
-document.getElementById('activeHours').innerText = `⏱ ${Math.round(totalMsMonth / 3600000)} hr`;
+document.getElementById('activeHours').innerText = `${Math.round(totalMsMonth / 3600000)} hr`;
 
 // --- Recent Visitors (most recent check-in per visitor) ---
 const recentVisitorsMap = new Map();
