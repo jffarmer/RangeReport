@@ -59,24 +59,7 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
     --highlight-bg: rgba(255,255,255,0.12); /* subtle white tint */
   }
 }
-.progress-bar-bg {
-  background:#eee;
-  border-radius:12px;
-  height:24px;
-  width:100%;
-  overflow:hidden;
-}
-.progress-bar-fill {
-  background:var(--accent);
-  height:100%;
-  width:0%;
-  text-align:center;
-  color:#fff;
-  font-weight:600;
-  line-height:24px;
-  border-radius:12px 0 0 12px;
-  transition: width 0.5s ease;
-}
+
 </style>
 <link rel="icon" type="image/png" sizes="32x32" href="/RangeReport/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/RangeReport/favicon-16.png">
@@ -157,11 +140,7 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 
 <div class="card half-width">
   <h2>⏳ This Month’s Total Hours</h2>
-  <div id="activeHours" style="margin-top:10px;">
-    <div class="progress-bar-bg">
-      <div class="progress-bar-fill" id="activeHoursBar">0%</div>
-    </div>
-  </div>
+  <div id="activeHours" style="font-size:24px; font-weight:600; margin-top:10px;">Loading…</div>
 </div>
 
 <div class="card half-width">
@@ -539,16 +518,7 @@ Object.values(activeSessions).forEach(session => {
 
 // --- Active Hours Card (This Month) ---
 const totalMsMonth = Object.values(totalsMonth).reduce((a, b) => a + b, 0);
-const totalHoursMonth = totalMsMonth / 3600000;
-const nowAH = new Date();
-const daysInMonth = new Date(nowAH.getFullYear(), nowAH.getMonth()+1, 0).getDate();
-const totalPossibleHours = daysInMonth * 24;
-
-const percent = Math.min(Math.round((totalHoursMonth / totalPossibleHours) * 100), 100);
-const bar = document.getElementById('activeHoursBar');
-bar.style.width = percent + '%';
-bar.innerText = `${totalHoursMonth} hr (${percent}%)`;
-
+document.getElementById('activeHours').innerText = `⏱ ${Math.round(totalMsMonth / 3600000)} hr`;
 
 // --- Recent Visitors (most recent check-in per visitor) ---
 const recentVisitorsMap = new Map();
