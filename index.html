@@ -540,8 +540,8 @@ Object.values(activeSessions).forEach(session => {
 // --- Active Hours Card (This Month) ---
 const totalMsMonth = Object.values(totalsMonth).reduce((a, b) => a + b, 0);
 const totalHoursMonth = totalMsMonth / 3600000;
-const now = new Date();
-const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+const nowAH = new Date();
+const daysInMonth = new Date(nowAH.getFullYear(), nowAH.getMonth()+1, 0).getDate();
 const totalPossibleHours = daysInMonth * 24;
 
 const percent = Math.min(Math.round((totalHoursMonth / totalPossibleHours) * 100), 100);
