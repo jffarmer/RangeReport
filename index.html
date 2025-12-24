@@ -59,7 +59,11 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
     --highlight-bg: rgba(255,255,255,0.12); /* subtle white tint */
   }
 }
-
+.circular-chart { width: 100%; max-width: 120px; height: auto; }
+.circle-bg { fill: none; stroke: #eee; stroke-width: 3.8; }
+.circle { fill: none; stroke: #1f6feb; stroke-width: 3.8; stroke-linecap: round; transition: stroke-dasharray 0.5s; }
+.percentage { fill: #333; font-size: 0.5em; text-anchor: middle; }
+  
 </style>
 <link rel="icon" type="image/png" sizes="32x32" href="/RangeReport/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/RangeReport/favicon-16.png">
@@ -138,9 +142,22 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   </div>
 </div>
 
-<div class="card">
-  <h2>⏱ Active Hours</h2>
-  <div id="activeHours">Loading…</div>
+<div class="card" style="flex:1; min-width:200px;">
+  <h2>⏱ Monthly Active Hours</h2>
+  <div class="gauge-container">
+    <svg viewBox="0 0 36 36" class="circular-chart">
+      <path class="circle-bg"
+            d="M18 2.0845
+               a 15.9155 15.9155 0 0 1 0 31.831
+               a 15.9155 15.9155 0 0 1 0 -31.831"/>
+      <path class="circle"
+            stroke-dasharray="0, 100"
+            d="M18 2.0845
+               a 15.9155 15.9155 0 0 1 0 31.831
+               a 15.9155 15.9155 0 0 1 0 -31.831"/>
+      <text x="18" y="20.35" class="percentage">0</text>
+    </svg>
+  </div>
 </div>
 <div class="card">
   <h2>👥 Recent Check-Ins</h2>
@@ -220,7 +237,17 @@ function renderLeaderboard(source) {
     leaderboardDiv.appendChild(div);
   });
 }
+function renderMonthlyHoursGauge(totalMs, targetHours = 200) {
+  const hours = totalMs / 3600000; // convert ms → hours
+  const pct = Math.min((hours / targetHours) * 100, 100);
 
+  const circle = document.querySelector(".circle");
+  const text = document.querySelector(".percentage");
+  circle.setAttribute("stroke-dasharray", `${pct}, 100`);
+  text.textContent = `${Math.round(hours)} hr`;
+}
+
+  
 function setActive(btn) {
   document.querySelectorAll("#lbMonth,#lbAll")
     .forEach(b => b.style.opacity = "0.6");
@@ -532,6 +559,9 @@ if(recent.length === 0) {
     .join('');
 }
 
+// Example with your existing totalsMonth
+const totalMs = Object.values(totalsMonth).reduce((a,b)=>a+b,0);
+renderMonthlyHoursGauge(totalMs, 200);
 // Default render
 renderLeaderboard(totalsMonth);
 
