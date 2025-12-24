@@ -132,6 +132,10 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
 <div class="card">
   <h2>🏆 Leaderboard</h2>
   <div id="leaderboard"><div class="empty">Loading…</div></div>
+  <div style="margin-bottom:8px;">
+    <button class="btn" id="lbMonth">This Month</button>
+    <button class="btn" id="lbAll">All Time</button>
+  </div>
 </div>
 
 <div class="footer-image"></div>
@@ -170,6 +174,8 @@ function showBusy(msg="Working…") { setup.style.display="none"; busy.style.dis
 function showCheckedIn() { setup.style.display="none"; busy.style.display="none"; done.style.display="block"; checkedOut.style.display="none"; }
 function showCheckedOut() { setup.style.display="none"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="block"; }
 function timeAgo(ts) { const diff=Math.floor((Date.now()-new Date(ts).getTime())/1000); if(diff<60)return"Just now"; if(diff<3600)return`${Math.floor(diff/60)} min ago`; return`${Math.floor(diff/3600)} hr ${Math.floor((diff%3600)/60)} min ago`; }
+function formatDuration(ms) { const totalMinutes = Math.round(ms / 60000); const hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60; return { hours, minutes };
+}
 
 // ---------- LOAD CURRENT STATE ----------
 async function loadState() {
@@ -390,58 +396,70 @@ async function loadLists() {
         leaderboardDiv.appendChild(div);
     });
     */
-  // ---------- LEADERBOARD: TOTAL HOURS ----------
-  const sessionsByVisitor = {};
-  const totalMsByName = {};
+  // ---------- LEADERBOARD (HOURS) ----------
+  const nowDate = new Date();
+  const monthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
   
-  // Step 1: group events per visitor
+  // Pair checkins with checkouts per visitor
+  const sessions = {};
   data
-    .filter(r => r.name && r.visitorId)
-    .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+    .sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp))
     .forEach(row => {
-      if (!sessionsByVisitor[row.visitorId]) {
-        sessionsByVisitor[row.visitorId] = [];
+      if (!row.name) return;
+  
+      if (row.type === "checkin") {
+        sessions[row.visitorId] = { name: row.name, start: new Date(row.timestamp) };
       }
-      sessionsByVisitor[row.visitorId].push(row);
+      if (row.type === "checkout" && sessions[row.visitorId]) {
+        sessions[row.visitorId].end = new Date(row.timestamp);
+      }
     });
   
-  // Step 2: pair checkin → checkout
-  Object.values(sessionsByVisitor).forEach(events => {
-    for (let i = 0; i < events.length; i++) {
-      const start = events[i];
+  const totalsAll = {};
+  const totalsMonth = {};
   
-      if (start.type !== "checkin") continue;
+  Object.values(sessions).forEach(s => {
+    if (!s.end) return;
   
-      const end = events[i + 1];
-      if (!end || end.type !== "checkout") continue;
+    const duration = s.end - s.start;
+    if (duration <= 0) return;
   
-      const durationMs =
-        new Date(end.timestamp) - new Date(start.timestamp);
+    totalsAll[s.name] = (totalsAll[s.name] || 0) + duration;
   
-      if (durationMs > 0) {
-        totalMsByName[start.name] =
-          (totalMsByName[start.name] || 0) + durationMs;
-      }
+    if (s.start >= monthStart) {
+      totalsMonth[s.name] = (totalsMonth[s.name] || 0) + duration;
     }
   });
   
-  // Step 3: render leaderboard
-  leaderboardDiv.innerHTML = "";
+  // Render function
+  function renderLeaderboard(source) {
+    leaderboardDiv.innerHTML = "";
   
-  Object.entries(totalMsByName)
-    .map(([name, ms]) => {
-      const hours = Math.round(ms / (1000 * 60 * 60));
-      return [name, hours];
-    })
-    .filter(([, hours]) => hours > 0)
-    .sort((a,b) => b[1] - a[1])
-    .forEach(([name, hours]) => {
-      const div = document.createElement("div");
-      div.className = "row";
-      div.innerHTML = `<strong>${name}</strong> ${hours} hr${hours !== 1 ? "s" : ""}`;
-      leaderboardDiv.appendChild(div);
-    });
-
+    Object.entries(source)
+      .sort((a,b)=>b[1]-a[1])
+      .forEach(([name, ms], index) => {
+        const { hours, minutes } = formatDuration(ms);
+        const rounded = Math.round(ms / 3600000);
+  
+        const medal =
+          index === 0 ? "🥇" :
+          index === 1 ? "🥈" :
+          index === 2 ? "🥉" : "";
+  
+        const div = document.createElement("div");
+        div.className = "row";
+        div.title = `${hours}h ${minutes}m`;
+  
+        div.innerHTML = `
+          <strong>${medal} ${name}</strong>
+          <span>${rounded} hr</span>
+        `;
+        leaderboardDiv.appendChild(div);
+      });
+  
+    if (!leaderboardDiv.children.length) {
+      leaderboardDiv.innerHTML = `<div class="empty">No data yet</div>`;
+    }
 }
 
 // Realtime: reload lists on any change
@@ -450,6 +468,11 @@ supabase.channel("changes").on("postgres_changes",{ event:"*", schema:"public", 
 // Initial load
 loadState();
 loadLists();
+document.getElementById("lbMonth").onclick = () => renderLeaderboard(totalsMonth);
+document.getElementById("lbAll").onclick = () => renderLeaderboard(totalsAll);
+
+// Default view
+renderLeaderboard(totalsMonth);
 </script>
 
 </body>
