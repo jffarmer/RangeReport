@@ -451,13 +451,15 @@ async function loadLists() {
         leaderboardDiv.appendChild(div);
     });
     */
-  // ---------- LEADERBOARD (HOURS) ----------
 // ---------- LEADERBOARD (HOURS) ----------
 const nowDate = new Date();
 const monthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+
+totalsAll = {};
+totalsMonth = {};
 const activeSessions = {};
 
-// Sort oldest → newest so sessions pair correctly
+// Sort oldest → newest
 data
   .slice()
   .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
@@ -487,9 +489,28 @@ data
         }
       }
 
-      delete activeSessions[row.visitorId]; // session closed
+      delete activeSessions[row.visitorId];
     }
   });
+
+// Include active sessions (still checked in)
+const nowTs = Date.now();
+Object.values(activeSessions).forEach(session => {
+  const duration = nowTs - session.start;
+  if (duration <= 0) return;
+
+  totalsAll[session.name] =
+    (totalsAll[session.name] || 0) + duration;
+
+  if (session.start >= monthStart) {
+    totalsMonth[session.name] =
+      (totalsMonth[session.name] || 0) + duration;
+  }
+});
+
+// Default render
+renderLeaderboard(totalsMonth);
+
 
 }
 // Realtime: reload lists on any change
