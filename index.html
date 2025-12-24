@@ -560,7 +560,7 @@ if(recent.length === 0) {
 }
 
 // Example with your existing totalsMonth
-const totalMs = Object.values(totalsMonth).reduce((a,b)=>a+b,0);
+totalMs = Object.values(totalsMonth).reduce((a,b)=>a+b,0);
 renderMonthlyHoursGauge(totalMs, 200);
 // Default render
 renderLeaderboard(totalsMonth);
