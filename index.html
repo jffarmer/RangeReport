@@ -103,9 +103,7 @@ input[type="text"]{width:100%;padding:10px 12px;border-radius:8px;border:1px sol
   <div id="menuBtn">☰</div>
   <div id="menu">
     <button id="changeNameBtn">Change Name</button>
-    <button id="setGuestsBtn">Set Guests</button>
   </div>
-
 </div>
 
 <div class="card" id="rangeCard" style="position:relative;">
@@ -180,7 +178,6 @@ const sound = new Audio("/RangeReport/reload.mp3");
 
 let visitorId = localStorage.getItem("visitorId");
 let visitorName = localStorage.getItem("visitorName") || "";
-let guestCount = parseInt(localStorage.getItem("guestCount") || "0", 10);
 
 // ---------- UI STATE ----------
 function showSetup() { setup.style.display="block"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="none"; }
@@ -278,7 +275,6 @@ saveNameBtn.addEventListener("click", async () => {
         .insert({
             name: visitorName,
             visitorId,
-            guests: guestCount,
             device: navigator.userAgent,
             timestamp: new Date().toISOString(),
             type: "checkin"
@@ -317,14 +313,9 @@ checkoutBtn.addEventListener("click", async () => {
 
     const { error } = await supabase
         .from("range_checkins")
-        .insert({ name: visitorName, visitorId, guests: guestCount, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
+        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
 
     if (error) { console.error(error); return; }
-
-    if (row.type === "checkout") {
-      localStorage.setItem("guestCount", "0");
-      guestCount = 0;
-    }
 
     showCheckedOut();
      // --- HAPTICS ---
@@ -352,7 +343,7 @@ checkBackInBtn.addEventListener("click", async () => {
 
     const { error } = await supabase
         .from("range_checkins")
-        .insert({ name: visitorName, visitorId, guests: guestCount, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkin" });
+        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkin" });
 
     if (error) { console.error(error); return; }
 
@@ -382,34 +373,6 @@ changeNameBtn.addEventListener("click", async () => {
     localStorage.setItem("visitorName", visitorName);
     menu.style.display="none";
     alert("Name updated! Future check-ins will use the new name.");
-});
-
-// ---------- SET GUESTS --------
-const setGuestsBtn = document.getElementById("setGuestsBtn");
-
-setGuestsBtn.addEventListener("click", async () => {
-  const input = prompt("How many guests are with you? (0–10)", guestCount);
-  if (input === null) return;
-
-  const count = Math.max(0, Math.min(10, parseInt(input, 10) || 0));
-  guestCount = count;
-  localStorage.setItem("guestCount", guestCount);
-
-  menu.style.display = "none";
-
-  // If currently checked in, update state via a lightweight event
-  if (visitorId) {
-    await supabase.from("range_checkins").insert({
-      name: visitorName,
-      visitorId,
-      guests: guestCount,
-      device: "guest-update",
-      timestamp: new Date().toISOString(),
-      type: "guest-update"
-    });
-
-    loadLists();
-  }
 });
 
 // ---------- REFRESH -----------
@@ -449,18 +412,14 @@ async function loadLists() {
         if (row.type === "checkin") {
             const lastTime = new Date(row.timestamp).getTime();
             if (now - lastTime > FOUR_HOURS) {
-              await supabase.from("range_checkins").insert({
-                name: row.name,
-                visitorId: vid,
-                guests: row.guests || 0,
-                device: "auto-expire",
-                timestamp: new Date().toISOString(),
-                type: "checkout"
-              });
-            
-              if (vid === visitorId) {
-                localStorage.setItem("guestCount", "0");
-              }
+                // Auto checkout
+                await supabase.from("range_checkins").insert({
+                    name: row.name,
+                    visitorId: vid,
+                    device: "auto-expire",
+                    timestamp: new Date().toISOString(),
+                    type: "checkout"
+                });
 
                 // Update map so UI reflects the new checkout
                 latestByVisitor.set(vid, {
@@ -483,13 +442,7 @@ async function loadLists() {
         if (row.visitorId === visitorId) {
             div.style.background = "var(--highlight-bg)";
         }
-        div.innerHTML = `
-          <strong>
-            ${row.name}
-            ${row.guests > 0 ? ` (+${row.guests} guest${row.guests > 1 ? "s" : ""})` : ""}
-          </strong>
-          Checked in: ${timeAgo(row.timestamp)}
-        `;
+        div.innerHTML=`<strong>${row.name}</strong> Checked in: ${timeAgo(row.timestamp)}`;
         listDiv.appendChild(div);
     });}
 
