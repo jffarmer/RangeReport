@@ -328,35 +328,35 @@ saveNameBtn.addEventListener("click", async () => {
 
 // ---------- CHECK OUT ----------
 checkoutBtn.addEventListener("click", async () => {
-    if (!visitorId || !visitorName) return;
+  if (!visitorId || !visitorName || !isCheckedIn) return;
 
-    const { error } = await supabase
-        .from("range_checkins")
-        .insert({ name: visitorName, visitorId, guests: 0, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
+  const { error } = await supabase
+    .from("range_checkins")
+    .insert({
+      name: visitorName,
+      visitorId,
+      guests: 0,
+      device: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+      type: "checkout"
+    });
 
-    if (error) { console.error(error); return; }
+  if (error) {
+    console.error(error);
+    return;
+  }
 
-    if (row.type === "checkout") {
-      localStorage.setItem("guestCount", "0");
-      guestCount = 0;
-    }
+  // ✅ reset guests
+  guestCount = 0;
+  localStorage.setItem("guestCount", "0");
 
-    isCheckedIn = false;
-    showCheckedOut();
-     // --- HAPTICS ---
-    try {
-        // Android
-        if ("vibrate" in navigator) navigator.vibrate(40);
+  // ✅ update local state
+  isCheckedIn = false;
 
-        // iPhone PWA (iOS 17.4+)
-        if (window.Haptics && Haptics.impactAsync) {
-            await Haptics.impactAsync("small");
-        }
-    } catch (e) {
-        console.warn("Haptics failed:", e);
-    }
-    loadLists();
+  showCheckedOut();
+  loadLists();
 });
+
 
 // ---------- CHECK BACK IN ----------
 checkBackInBtn.addEventListener("click", async () => {
