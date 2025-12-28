@@ -185,14 +185,13 @@ let guestCount = parseInt(localStorage.getItem("guestCount") || "0", 10);
 // ---------- UI STATE ----------
 function showSetup() { setup.style.display="block"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="none"; }
 function showBusy(msg="Working…") { setup.style.display="none"; busy.style.display="block"; busyText.innerText=msg; done.style.display="none"; checkedOut.style.display="none"; }
-function showCheckedIn() { setup.style.display="none"; busy.style.display="none"; done.style.display="block"; checkedOut.style.display="none"; checkoutBtn.disabled = !isCheckedIn;}
-function showCheckedOut() { setup.style.display="none"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="block"; checkoutBtn.disabled = !isCheckedIn;}
+function showCheckedIn() { setup.style.display="none"; busy.style.display="none"; done.style.display="block"; checkedOut.style.display="none"; }
+function showCheckedOut() { setup.style.display="none"; busy.style.display="none"; done.style.display="none"; checkedOut.style.display="block"; }
 function timeAgo(ts) { const diff=Math.floor((Date.now()-new Date(ts).getTime())/1000); if(diff<60)return"Just now"; if(diff<3600)return`${Math.floor(diff/60)} min ago`; return`${Math.floor(diff/3600)} hr ${Math.floor((diff%3600)/60)} min ago`; }
 function formatDuration(ms) { const totalMinutes = Math.round(ms / 60000); const hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60; return { hours, minutes };
 }
 let totalsAll = {};
 let totalsMonth = {};
-let isCheckedIn = false;
 
 function renderLeaderboard(source) {
   leaderboardDiv.innerHTML = "";
@@ -246,94 +245,101 @@ lbAll.onclick = () => {
 
 // ---------- LOAD CURRENT STATE ----------
 async function loadState() {
-  if (!visitorId || !visitorName) {
-    isCheckedIn = false;
-    showSetup();
-    return;
-  }
+    if (!visitorId || !visitorName) { showSetup(); return; }
 
-  const { data, error } = await supabase
-    .from("range_checkins")
-    .select("type")
-    .eq("visitorId", visitorId)
-    .order("timestamp", { ascending: false })
-    .limit(1);
+    const { data, error } = await supabase
+        .from("range_checkins")
+        .select("*")
+        .eq("visitorId", visitorId)
+        .order("timestamp", { ascending: false })
+        .limit(1);
 
-  if (error || !data.length) {
-    isCheckedIn = false;
-    showSetup();
-    return;
-  }
+    if (error || !data.length) { showSetup(); return; }
 
-  const lastType = data[0].type;
-
-  if (lastType === "checkin") {
-    isCheckedIn = true;
-    showCheckedIn();
-  } else {
-    isCheckedIn = false;
-    showCheckedOut();
-  }
+    const last = data[0];
+    if (last.type==="checkin") showCheckedIn();
+    else showCheckedOut();
 }
 
-
-// ---------- CHECK IN ----------
 // ---------- CHECK IN ----------
 saveNameBtn.addEventListener("click", async () => {
-  const name = nameInput.value.trim();
-  if (!name) return;
+    const name = nameInput.value.trim();
+    if (!name) return;
 
-  showBusy("Checking you in…");
+    showBusy("Checking you in…");
 
-  visitorId = crypto.randomUUID();
-  visitorName = name;
+    visitorId = crypto.randomUUID();
+    visitorName = name;
+    localStorage.setItem("visitorId", visitorId);
+    localStorage.setItem("visitorName", visitorName);
 
-  localStorage.setItem("visitorId", visitorId);
-  localStorage.setItem("visitorName", visitorName);
+    const { error } = await supabase
+        .from("range_checkins")
+        .insert({
+            name: visitorName,
+            visitorId,
+            guests: guestCount,
+            device: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            type: "checkin"
+        });
 
-  const { error } = await supabase.from("range_checkins").insert({
-    name: visitorName,
-    visitorId,
-    guests: guestCount,
-    device: navigator.userAgent,
-    timestamp: new Date().toISOString(),
-    type: "checkin"
-  });
+    if (error) { 
+        console.error(error);
+        showSetup();
+        return;
+    }
 
-  if (error) {
-    console.error(error);
-    showSetup();
-    return;
-  }
+    nameInput.value = "";
+    showCheckedIn();
+    sound.play();
 
-  isCheckedIn = true;   // ✅ CRITICAL
-  showCheckedIn();
-  loadLists();
+    // --- HAPTICS ---
+    try {
+        // Android
+        if ("vibrate" in navigator) navigator.vibrate(40);
+
+        // iPhone PWA (iOS 17.4+)
+        if (window.Haptics && Haptics.impactAsync) {
+            await Haptics.impactAsync("medium");
+        }
+    } catch (e) {
+        console.warn("Haptics failed:", e);
+    }
+
+    loadLists();
 });
+
 
 // ---------- CHECK OUT ----------
 checkoutBtn.addEventListener("click", async () => {
-  if (!isCheckedIn) return;
+    if (!visitorId || !visitorName) return;
 
-  const { error } = await supabase.from("range_checkins").insert({
-    name: visitorName,
-    visitorId,
-    guests: 0,
-    device: navigator.userAgent,
-    timestamp: new Date().toISOString(),
-    type: "checkout"
-  });
+    const { error } = await supabase
+        .from("range_checkins")
+        .insert({ name: visitorName, visitorId, guests: guestCount, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
 
-  if (error) {
-    console.error(error);
-    return;
-  }
+    if (error) { console.error(error); return; }
 
-  guestCount = 0;
-  localStorage.setItem("guestCount", "0");
+    if (row.type === "checkout") {
+      localStorage.setItem("guestCount", "0");
+      guestCount = 0;
+    }
 
-  await loadState();   // 🔑 THIS fixes the stuck button
-  loadLists();
+    showCheckedOut();
+     // --- HAPTICS ---
+    try {
+        // Android
+        if ("vibrate" in navigator) navigator.vibrate(40);
+
+        // iPhone PWA (iOS 17.4+)
+        if (window.Haptics && Haptics.impactAsync) {
+            await Haptics.impactAsync("small");
+        }
+    } catch (e) {
+        console.warn("Haptics failed:", e);
+    }
+    loadLists();
 });
 
 // ---------- CHECK BACK IN ----------
@@ -392,20 +398,18 @@ setGuestsBtn.addEventListener("click", async () => {
   menu.style.display = "none";
 
   // If currently checked in, update state via a lightweight event
-  if (isCheckedIn) {
+  if (visitorId) {
     await supabase.from("range_checkins").insert({
       name: visitorName,
       visitorId,
       guests: guestCount,
       device: "guest-update",
       timestamp: new Date().toISOString(),
-      type: "guest_update"
+      type: "checkin"
     });
-  
-    await loadState();   // 🔑 resync truth
+
     loadLists();
   }
-
 });
 
 // ---------- REFRESH -----------
@@ -435,18 +439,7 @@ async function loadLists() {
     if(error) return;
 
     const latestByVisitor = new Map();
-    for (const row of data) {
-        if (row.type === "guest_update" && latestByVisitor.has(row.visitorId)) {
-          const current = latestByVisitor.get(row.visitorId);
-          if (current.type === "checkin") {
-            latestByVisitor.set(row.visitorId, {
-              ...current,
-              guests: row.guests
-            });
-          }
-        }
-      }
-
+    for(const row of data) if(!latestByVisitor.has(row.visitorId)) latestByVisitor.set(row.visitorId,row);
 
     // --- AUTO CHECKOUT AFTER 4 HOURS ---
     const FOUR_HOURS = 4 * 60 * 60 * 1000;
