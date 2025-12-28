@@ -192,6 +192,7 @@ function formatDuration(ms) { const totalMinutes = Math.round(ms / 60000); const
 }
 let totalsAll = {};
 let totalsMonth = {};
+let isCheckedIn = false;
 
 function renderLeaderboard(source) {
   leaderboardDiv.innerHTML = "";
@@ -245,20 +246,34 @@ lbAll.onclick = () => {
 
 // ---------- LOAD CURRENT STATE ----------
 async function loadState() {
-    if (!visitorId || !visitorName) { showSetup(); return; }
+  if (!visitorId || !visitorName) {
+    isCheckedIn = false;
+    showSetup();
+    return;
+  }
 
-    const { data, error } = await supabase
-        .from("range_checkins")
-        .select("*")
-        .eq("visitorId", visitorId)
-        .order("timestamp", { ascending: false })
-        .limit(1);
+  const { data, error } = await supabase
+    .from("range_checkins")
+    .select("*")
+    .eq("visitorId", visitorId)
+    .order("timestamp", { ascending: false })
+    .limit(1);
 
-    if (error || !data.length) { showSetup(); return; }
+  if (error || !data.length) {
+    isCheckedIn = false;
+    showSetup();
+    return;
+  }
 
-    const last = data[0];
-    if (last.type==="checkin") showCheckedIn();
-    else showCheckedOut();
+  const last = data[0];
+
+  if (last.type === "checkin") {
+    isCheckedIn = true;
+    showCheckedIn();
+  } else {
+    isCheckedIn = false;
+    showCheckedOut();
+  }
 }
 
 // ---------- CHECK IN ----------
@@ -317,7 +332,7 @@ checkoutBtn.addEventListener("click", async () => {
 
     const { error } = await supabase
         .from("range_checkins")
-        .insert({ name: visitorName, visitorId, guests: guestCount, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
+        .insert({ name: visitorName, visitorId, guests: 0, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkout" });
 
     if (error) { console.error(error); return; }
 
@@ -326,6 +341,7 @@ checkoutBtn.addEventListener("click", async () => {
       guestCount = 0;
     }
 
+    isCheckedIn = false;
     showCheckedOut();
      // --- HAPTICS ---
     try {
@@ -398,7 +414,7 @@ setGuestsBtn.addEventListener("click", async () => {
   menu.style.display = "none";
 
   // If currently checked in, update state via a lightweight event
-  if (visitorId) {
+  if (isCheckedIn) {
     await supabase.from("range_checkins").insert({
       name: visitorName,
       visitorId,
