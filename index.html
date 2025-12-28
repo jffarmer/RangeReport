@@ -295,19 +295,6 @@ saveNameBtn.addEventListener("click", async () => {
     showCheckedIn();
     sound.play();
 
-    // --- HAPTICS ---
-    try {
-        // Android
-        if ("vibrate" in navigator) navigator.vibrate(40);
-
-        // iPhone PWA (iOS 17.4+)
-        if (window.Haptics && Haptics.impactAsync) {
-            await Haptics.impactAsync("medium");
-        }
-    } catch (e) {
-        console.warn("Haptics failed:", e);
-    }
-
     loadLists();
 });
 
@@ -323,51 +310,36 @@ checkoutBtn.addEventListener("click", async () => {
     if (error) { console.error(error); return; }
     resetGuests();
     showCheckedOut();
-     // --- HAPTICS ---
-    try {
-        // Android
-        if ("vibrate" in navigator) navigator.vibrate(40);
-
-        // iPhone PWA (iOS 17.4+)
-        if (window.Haptics && Haptics.impactAsync) {
-            await Haptics.impactAsync("small");
-        }
-    } catch (e) {
-        console.warn("Haptics failed:", e);
-    }
     loadLists();
 });
 
 // ---------- CHECK BACK IN ----------
 checkBackInBtn.addEventListener("click", async () => {
-    if (!visitorName) {
-        visitorName = prompt("Name?");
-        if (!visitorName) return;
-        localStorage.setItem("visitorName", visitorName);
-    }
+  if (!visitorName) {
+      visitorName = prompt("Name?");
+      if (!visitorName) return;
+      localStorage.setItem("visitorName", visitorName);
+  }
 
-    const { error } = await supabase
-        .from("range_checkins")
-        .insert({ name: visitorName, visitorId, device: navigator.userAgent, timestamp: new Date().toISOString(), type: "checkin" });
+  const { error } = await supabase
+      .from("range_checkins")
+      .insert({
+          name: visitorName,
+          visitorId,
+          device: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          type: "checkin",
+          guests: guestCount  // ← add this
+      });
 
-    if (error) { console.error(error); return; }
+  if (error) { console.error(error); return; }
 
-    showCheckedIn();
-    sound.play();
-    // --- HAPTICS ---
-    try {
-        // Android
-        if ("vibrate" in navigator) navigator.vibrate(40);
+  showCheckedIn();
+  sound.play();
 
-        // iPhone PWA (iOS 17.4+)
-        if (window.Haptics && Haptics.impactAsync) {
-            await Haptics.impactAsync("medium");
-        }
-    } catch (e) {
-        console.warn("Haptics failed:", e);
-    }
-    loadLists();
+  loadLists();
 });
+
 
 // ---------- CHANGE NAME ----------
 menuBtn.addEventListener("click", () => { menu.style.display = menu.style.display==="block" ? "none" : "block"; });
