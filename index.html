@@ -313,7 +313,7 @@ saveNameBtn.addEventListener("click", async () => {
 
 // ---------- CHECK OUT ----------
 checkoutBtn.addEventListener("click", async () => {
-  if (!isCheckedIn) return; // 🔒 prevent double checkout
+  if (!isCheckedIn) return;
 
   const { error } = await supabase.from("range_checkins").insert({
     name: visitorName,
@@ -329,16 +329,12 @@ checkoutBtn.addEventListener("click", async () => {
     return;
   }
 
-  // Reset guest state
   guestCount = 0;
   localStorage.setItem("guestCount", "0");
 
-  isCheckedIn = false;   // ✅ CRITICAL
-  showCheckedOut();
+  await loadState();   // 🔑 THIS fixes the stuck button
   loadLists();
 });
-
-
 
 // ---------- CHECK BACK IN ----------
 checkBackInBtn.addEventListener("click", async () => {
@@ -403,11 +399,13 @@ setGuestsBtn.addEventListener("click", async () => {
       guests: guestCount,
       device: "guest-update",
       timestamp: new Date().toISOString(),
-      type: "checkin"
+      type: "guest_update"
     });
-
+  
+    await loadState();   // 🔑 resync truth
     loadLists();
   }
+
 });
 
 // ---------- REFRESH -----------
@@ -437,7 +435,18 @@ async function loadLists() {
     if(error) return;
 
     const latestByVisitor = new Map();
-    for(const row of data) if(!latestByVisitor.has(row.visitorId)) latestByVisitor.set(row.visitorId,row);
+    for (const row of data) {
+        if (row.type === "guest_update" && latestByVisitor.has(row.visitorId)) {
+          const current = latestByVisitor.get(row.visitorId);
+          if (current.type === "checkin") {
+            latestByVisitor.set(row.visitorId, {
+              ...current,
+              guests: row.guests
+            });
+          }
+        }
+      }
+
 
     // --- AUTO CHECKOUT AFTER 4 HOURS ---
     const FOUR_HOURS = 4 * 60 * 60 * 1000;
